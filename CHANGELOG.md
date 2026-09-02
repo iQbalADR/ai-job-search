@@ -13,6 +13,51 @@ per-file diff commands.
 
 ## [Unreleased]
 
+### Added
+
+- **Central `job-search.config.yaml`** - one commented file at the repo root now
+  holds the run settings that were previously scattered across skill/command
+  markdown or hard-coded: search locations, the recency window, employment types,
+  workplace types, how many results to show, which result files to write, which
+  portals to skip, and extra job sources. Every key is optional and falls back to
+  the prior default, so an existing fork keeps working with no config file at all.
+  `/scrape` and `/rank` read it in their load-state steps.
+- **Employment-type filtering (freelance / part-time / contract / …)** - both
+  shipped country-agnostic portal CLIs gain a `--employment-type` / `-t` flag over
+  a shared vocabulary (full-time, part-time, contract, freelance, temporary,
+  internship, comma = OR). `linkedin-search` maps it to LinkedIn's `f_JT` filter;
+  `freehire-search` maps it to its `employment_type` facet. Each validates up front
+  and exits 1 on a value it cannot express, rather than silently returning an
+  unfiltered or empty result set (`freelance` → Contract on both; `temporary` is
+  rejected by freehire, which has no such type). `/scrape` reads
+  `search.employment_types` from the config and passes it to each portal's native
+  flag where it has one, filtering client-side otherwise. Covered by new unit and
+  flag-validation tests in both CLIs.
+- **Config-driven extra job sources** - `sources.extra` in the config lets you add
+  job sources beyond the installed portal CLIs without writing a new skill: RSS/Atom
+  feeds, a generic REST/JSON API (with a field map), `site:` web-search queries, and
+  direct careers-page URLs. `/scrape` Step 1d crawls each, deduplicates and presents
+  them alongside portal results tagged with their source name, and treats every
+  fetched body as untrusted data. This is the lightweight middle ground between the
+  WebSearch fallback and a full `/add-portal` skill.
+- **`tools/export_jobs.py`** - a dependency-free exporter that writes the full job
+  list from `seen_jobs.json` to a self-contained HTML page (sortable, filterable,
+  clickable links, dark-mode aware, with per-job strengths/gaps) and a CSV. `/scrape`
+  and `/rank` run it after presenting so the complete list is always saved to
+  `reports/` (git-ignored) even when the terminal view is capped, and it accepts
+  `--status`, `--sort`, `--top`, and `--formats` for ad-hoc exports.
+
+### Changed
+
+- **Result count is configurable** - `output.show` in the config sets how many jobs
+  `/scrape` and `/rank` show in the terminal (`all`, `top10`, `top50`, or any
+  number; `/rank`'s `--top` still overrides). The terminal table is now just a
+  capped view - the exported files hold every job, however long the run.
+- **`search-queries.md` is now scoped to query strategy** - locations, the date
+  window, and employment types moved to `job-search.config.yaml`; the file keeps the
+  role/keyword query categories and points at the config for the run knobs, so there
+  is one obvious place to manage each kind of setting.
+
 ### Security
 
 - **`settings.json` no longer pre-approves `bun run` on arbitrary files** (#396) - the

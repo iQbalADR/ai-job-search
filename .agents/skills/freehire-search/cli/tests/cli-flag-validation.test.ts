@@ -75,6 +75,31 @@ describe("freehire CLI flag validation", () => {
     });
   });
 
+  describe("--employment-type validation", () => {
+    test("a type freehire cannot express exits 1 with BAD_ARG (not a silent zero-result search)", async () => {
+      const result = await runCLI(["search", "--employment-type", "temporary"]);
+      expect(result.exitCode).not.toBe(0);
+      const err = parsedStderr(result.stderr);
+      expect(err.code).toBe("BAD_ARG");
+      expect(err.error).toMatch(/employment type/);
+    });
+
+    test("an unrecognized type exits 1 with BAD_ARG", async () => {
+      const result = await runCLI(["search", "--employment-type", "seasonal"]);
+      expect(result.exitCode).not.toBe(0);
+      expect(parsedStderr(result.stderr).code).toBe("BAD_ARG");
+    });
+
+    // Network-free: the -t alias reaches validation (a bad value yields BAD_ARG,
+    // not UNKNOWN_FLAG), proving the alias is wired. Recognized values are covered
+    // network-free by the employmentTypeFacet unit tests in parsing.test.ts.
+    test("the -t alias resolves to --employment-type (a bad value validates, not UNKNOWN_FLAG)", async () => {
+      const result = await runCLI(["search", "-t", "seasonal"]);
+      expect(result.exitCode).not.toBe(0);
+      expect(parsedStderr(result.stderr).code).toBe("BAD_ARG");
+    });
+  });
+
   describe("detail argument validation", () => {
     test("missing slug exits 1 with NO_ID", async () => {
       const result = await runCLI(["detail"]);

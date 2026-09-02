@@ -1,0 +1,158 @@
+# ============================================================================
+# job-search.config.yaml
+#
+# One place to tune how /scrape and /rank behave. Edit this file instead of
+# hunting through the skill and command markdown. Everything here is optional:
+# delete a key (or the whole file) and the commands fall back to their built-in
+# defaults, so you can start small and add settings as you need them.
+#
+# This file is read by Claude when you run /scrape and /rank - it is not parsed
+# by a program, so comments and blank lines are free. Keep it valid YAML:
+# indent with spaces (never tabs), and keep the `key: value` / `- item` shapes
+# shown below.
+#
+# Quick tour:
+#   search   - where and what to look for, and which employment types to keep
+#   output   - how many jobs to show in the terminal, and the files to write
+#   portals  - turn an installed portal CLI on or off without editing its skill
+#   sources  - extra job sources (RSS, JSON API, web search, a careers page)
+#              on top of the installed portal CLIs
+# ============================================================================
+
+
+# ----------------------------------------------------------------------------
+# search - what /scrape looks for and what it keeps.
+# ----------------------------------------------------------------------------
+search:
+  # Locations to search. Used as the location flag for portal CLIs that take one
+  # (e.g. linkedin-search's --location) and appended to web-search queries.
+  # Use "Remote" for location-independent roles. Free text - match each portal's
+  # expected place format.
+  locations:
+    - "[YOUR_CITY], [YOUR_COUNTRY]"
+    # - "Remote"
+
+  # Only surface jobs posted within this many days. Applied via each portal's
+  # own recency flag where it has one, and client-side otherwise.
+  posted_within_days: 14
+
+  # Employment types to include. Leave the list empty ([]) to include every type.
+  # Recognized values (a shared vocabulary across all portals):
+  #   full-time  part-time  contract  freelance  temporary  internship
+  # /scrape passes these to each portal's native filter where it has one
+  # (LinkedIn f_JT, freehire employment_type) and filters client-side otherwise.
+  # Notes on coverage:
+  #   - LinkedIn maps freelance -> Contract (it has no separate freelance type).
+  #   - freehire supports full-time, part-time, contract, internship
+  #     (freelance -> contract; it has no temporary type).
+  employment_types: []
+  # Example - only freelance and part-time work:
+  # employment_types:
+  #   - freelance
+  #   - part-time
+
+  # Workplace types to include: remote, hybrid, onsite. Empty ([]) = all.
+  workplace_types: []
+  # workplace_types:
+  #   - remote
+  #   - hybrid
+
+
+# ----------------------------------------------------------------------------
+# output - how results are presented and saved.
+# ----------------------------------------------------------------------------
+output:
+  # How many jobs to show in the terminal table after /scrape and /rank.
+  #   all        - show every match
+  #   top10      - the 10 best
+  #   top50      - the 50 best
+  #   <a number> - e.g. 25
+  # This only controls the terminal view. The written files below always contain
+  # the FULL list, however many jobs there are.
+  show: top10
+
+  # Always write the full result list to files (in addition to the terminal
+  # view). true is recommended - a long scrape is hard to read in a terminal,
+  # and the files give you sortable, clickable copies.
+  write_files: true
+
+  # File formats to write. Recognized: html, csv.
+  #   html - a self-contained page with a sortable table and clickable links
+  #   csv  - opens in Excel / Google Sheets; complements job_search_tracker.csv
+  formats:
+    - html
+    - csv
+
+  # Directory the files are written to (created if missing). This folder is
+  # git-ignored, so your job results are never committed.
+  directory: reports
+
+
+# ----------------------------------------------------------------------------
+# portals - the installed portal CLIs under .agents/skills/.
+#
+# /scrape auto-discovers every portal skill; by default it runs all of them.
+# List a skill's directory name here to skip it for a run without editing the
+# skill itself. (Setting `enabled: false` in a portal's own SKILL.md still works
+# too - this list is just a convenient central override.)
+# ----------------------------------------------------------------------------
+portals:
+  disabled: []
+  # disabled:
+  #   - jobnet-search
+  #   - jobdanmark-search
+
+
+# ----------------------------------------------------------------------------
+# sources.extra - job sources beyond the installed portal CLIs.
+#
+# Each entry is one extra source /scrape will crawl in addition to the portal
+# CLIs. This is the lightweight alternative to /add-portal: no code to write,
+# just a few lines here. Four source types are supported. Every entry needs a
+# `type` and a `name`; the rest depends on the type.
+#
+# Results from these sources are deduplicated and presented alongside portal-CLI
+# results, tagged with the source name so you can see where each job came from.
+# ----------------------------------------------------------------------------
+sources:
+  extra: []
+
+  # -- Uncomment and adapt any of the examples below. --
+  #
+  # extra:
+  #   # 1) RSS / Atom feed. Many remote and freelance boards publish one.
+  #   - type: rss
+  #     name: WeWorkRemotely
+  #     url: https://weworkremotely.com/remote-jobs.rss
+  #     # Optional: tag every job from this feed with these employment types,
+  #     # so the employment_types filter above can include/exclude the feed.
+  #     employment_types: [freelance, contract]
+  #
+  #   # 2) Generic REST / JSON API. Point at an endpoint that returns JSON and
+  #   #    map its fields onto the standard result fields. `results_path` is the
+  #   #    dot-path to the array of jobs in the response (omit if the response is
+  #   #    already an array).
+  #   - type: api
+  #     name: Example Jobs API
+  #     url: https://api.example.com/jobs?q=python&remote=true
+  #     results_path: data
+  #     map:
+  #       title: position
+  #       company: company_name
+  #       url: apply_url
+  #       location: city
+  #       date: published_at
+  #
+  #   # 3) site: web-search query. Runs through /scrape's WebSearch fallback.
+  #   #    {keywords} and {location} are filled from `search` above and your
+  #   #    profile's role keywords.
+  #   - type: websearch
+  #     name: Upwork
+  #     query: 'site:upwork.com {keywords} {location}'
+  #
+  #   # 4) Direct listing / careers page. /scrape fetches the URL and extracts
+  #   #    the postings it finds. Most flexible, least predictable (page markup
+  #   #    varies) - best for a specific employer's careers page.
+  #   - type: url
+  #     name: Acme Careers
+  #     url: https://acme.example.com/careers

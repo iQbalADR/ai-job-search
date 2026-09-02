@@ -15,7 +15,7 @@ Follow these steps **in order**.
 - Nothing → rank all jobs with status `new` in `job_scraper/seen_jobs.json`
 - A focus area (e.g. `/rank data science`) → rank only jobs whose title or stored fit-notes match the focus
 - `--all` → re-rank every job that has not been applied to, including previously ranked ones (useful after the profile changes)
-- `--top <N>` → shortlist size (default 5)
+- `--top <N|all>` → shortlist size. When omitted, the default comes from `output.show` in `job-search.config.yaml` (`top10` → 10, `top50` → 50, a bare number → that many, `all` → every job above the shortlist threshold); if the config is absent, default to 10. `--top` on the command line always overrides the config. This caps only the **shortlist section** of the terminal output — the file written in Step 4.5 always holds every ranked job.
 
 ---
 
@@ -28,6 +28,7 @@ Follow these steps **in order**.
 5. Read the scoring framework and profile **once**:
    - `.claude/skills/job-application-assistant/04-job-evaluation.md`
    - `.claude/skills/job-application-assistant/01-candidate-profile.md`
+6. Read `job-search.config.yaml` (repo root, optional) for `output.show` (the default shortlist size — see Step 0) and `output.write_files` / `output.formats` / `output.directory` (the Step 4.5 export). Any missing key uses its default.
 
 State how many jobs will be ranked before proceeding.
 
@@ -94,6 +95,25 @@ Do not modify `job_search_tracker.csv` - that file records applications, and `/r
 
 ---
 
+## Step 4.5: Write the Ranked List to Files
+
+Unless `output.write_files` in `job-search.config.yaml` is `false` (default is to
+write), export the **full** ranked list to files after Step 4 has persisted the
+scores — the terminal shortlist below is capped by `--top`/`output.show`, but the
+files hold every ranked job, sorted by score, with clickable links and each job's
+strengths and gaps. This is the sortable, browsable copy of a long ranking.
+
+```bash
+python3 tools/export_jobs.py --status ranked --sort score --basename job-ranking --title "Job Ranking - <YYYY-MM-DD>"
+```
+
+- Respect `output.formats` (default `html,csv`) via `--formats <list>` and `output.directory` (default `reports`) via `--out-dir <dir>`. Default output: `reports/job-ranking.html` and `reports/job-ranking.csv` (the `reports/` folder is git-ignored). Using a distinct basename from `/scrape`'s `job-matches` keeps the two exports from overwriting each other.
+- If `python3` is unavailable, fall back to `python`; if neither is present, note it and skip the export rather than failing the command.
+
+Mention the written files in the Step 5 output so the user knows the full ranking is one click away, however long it is.
+
+---
+
 ## Step 5: Present the Shortlist
 
 ```
@@ -128,6 +148,8 @@ Swept <S> previously ranked entries (<E> newly expired, <C> closing soon).
 
 Rules for the presentation:
 
+- The **Shortlist** holds the top jobs up to the `--top`/`output.show` size (Step 0); the rest fall under **Below threshold**. When the shortlist is capped below the number of jobs that scored above the fit threshold, say so and point to the exported files (Step 4.5) for the complete ranking. With `--top all`, every above-threshold job is shortlisted.
+- If Step 4.5 wrote files, add a short line naming them, e.g. "Full ranking: `reports/job-ranking.html` (open in a browser) and `reports/job-ranking.csv`."
 - Every table (shortlist, below threshold, excluded) includes the posting URL as a clickable link - link to the entry's `url` field in `seen_jobs.json` (not the entry's key, which for some portals is a company+title composite rather than the URL), so this never requires an extra lookup. Never drop the link for brevity.
 - A shortlisted job with `language_gate: FLAG` gets a ⚠ marker next to its Title (same treatment as a location FLAG) and its `language_note` quoted in that job's "Why these ranked highest" writeup, so the language-level gap is visible without digging into the raw JSON.
 - Every claim traces to fetched posting text or the profile - no invented details.

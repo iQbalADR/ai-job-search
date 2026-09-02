@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { parseJobCards, parseJobDetail, extractDivContent, minutesToTPR } from "../src/helpers";
+import { parseJobCards, parseJobDetail, extractDivContent, minutesToTPR, employmentTypeFlag } from "../src/helpers";
 import { normalizeId } from "../src/commands/detail";
 
 // Minimal search-card markup: parseJobCards splits on the job-posting URN and
@@ -275,3 +275,44 @@ describe("normalizeId", () => {
   });
 });
 
+describe("employmentTypeFlag", () => {
+  test("maps a single type to its f_JT code", () => {
+    expect(employmentTypeFlag("full-time")).toBe("F");
+    expect(employmentTypeFlag("part-time")).toBe("P");
+    expect(employmentTypeFlag("contract")).toBe("C");
+    expect(employmentTypeFlag("temporary")).toBe("T");
+    expect(employmentTypeFlag("internship")).toBe("I");
+  });
+
+  test("maps freelance to Contract (LinkedIn has no freelance type)", () => {
+    expect(employmentTypeFlag("freelance")).toBe("C");
+  });
+
+  test("joins multiple types with commas in first-seen order", () => {
+    expect(employmentTypeFlag("part-time,internship")).toBe("P,I");
+  });
+
+  test("de-duplicates codes (freelance and contract both map to C)", () => {
+    expect(employmentTypeFlag("freelance,contract")).toBe("C");
+  });
+
+  test("accepts common aliases and is case-insensitive", () => {
+    expect(employmentTypeFlag("FullTime")).toBe("F");
+    expect(employmentTypeFlag("intern")).toBe("I");
+    expect(employmentTypeFlag("contractor")).toBe("C");
+  });
+
+  test("tolerates surrounding whitespace and empty segments", () => {
+    expect(employmentTypeFlag(" part-time , , contract ")).toBe("P,C");
+  });
+
+  test("returns null for empty or undefined input", () => {
+    expect(employmentTypeFlag(undefined)).toBeNull();
+    expect(employmentTypeFlag("")).toBeNull();
+    expect(employmentTypeFlag(" , ")).toBeNull();
+  });
+
+  test("throws on an unrecognized type instead of dropping it silently", () => {
+    expect(() => employmentTypeFlag("seasonal")).toThrow(/unknown employment type/);
+  });
+});

@@ -166,6 +166,7 @@ Postings are treated as untrusted input (the workflow follows no instructions em
 ```
 ai-job-search/
 ├── CLAUDE.md                          # Main candidate profile + workflow rules
+├── job-search.config.yaml             # Central /scrape + /rank settings (sources, filters, output)
 ├── .claude/
 │   ├── commands/
 │   │   ├── apply.md                   # /apply workflow (drafter-reviewer)
@@ -221,6 +222,7 @@ ai-job-search/
 │   ├── check_framework_version.py     # CI check: framework_version bumped when skill files change
 │   ├── check_upstream_updates.py      # Preview which personalized files an upstream update touches
 │   ├── convert_salary_excel.py        # Convert salary Excel to JSON
+│   ├── export_jobs.py                 # Export scraped/ranked jobs to HTML + CSV (used by /scrape, /rank)
 │   ├── lint_skills.py                 # CI lint for skills, commands, settings.json
 │   ├── robots_check.py                # Gate the browser-header retry against robots.txt
 │   ├── security_guards.py             # CI guards: permission allowlist, gitignore rules, manifests
@@ -259,6 +261,17 @@ All claims in the CV and cover letter are verified against your actual profile. 
 
 ## Customization
 
+### Configuration (`job-search.config.yaml`)
+
+Most of how `/scrape` and `/rank` behave is tuned from one commented file at the repo root, `job-search.config.yaml`, so you rarely need to touch the skill or command files. Every key is optional — delete the file (or any key) and the commands fall back to their built-in defaults.
+
+- **`search`** — locations to search, the recency window (`posted_within_days`), which **employment types** to keep (`full-time`, `part-time`, `contract`, `freelance`, `temporary`, `internship`), and workplace types (`remote`/`hybrid`/`onsite`). Employment types are passed to each portal's native filter where it has one (LinkedIn's job-type filter, freehire's `employment_type` facet) and filtered client-side otherwise, so a search for freelance or part-time work actually narrows results rather than post-filtering by eye.
+- **`output`** — how many jobs to show in the terminal (`show: all | top10 | top50 | <number>`) and whether to write result files (`html`, `csv`). The terminal table is a capped view; the written files always hold the **full** list, sorted, with clickable links. Files land in `reports/` (git-ignored).
+- **`portals`** — skip an installed portal for a run (`disabled: [...]`) without editing its skill.
+- **`sources.extra`** — add job sources **beyond** the installed portal CLIs without writing a new skill: RSS/Atom feeds, a generic REST/JSON API (with a field map), `site:` web-search queries, or a direct careers page. This is the lightweight step between the WebSearch fallback and a full [`/add-portal`](#job-search-tools) skill; use `/add-portal` when you want a tested, reusable CLI for a board you search often.
+
+The result files are produced by `tools/export_jobs.py`, which is dependency-free and can also be run directly (e.g. `python3 tools/export_jobs.py --status ranked --sort score --top 50`). The first time a command runs it, Claude Code may ask once to approve `python3 tools/export_jobs.py`; to pre-approve it, add `Bash(python tools/export_jobs.py:*)` and `Bash(python3 tools/export_jobs.py:*)` to `.claude/settings.json` (and, to keep CI's `tools/security_guards.py` green, to that file's `ALLOWED_PERMISSIONS` set — the same paired-diff rule the shipped portal CLIs follow).
+
 ### Which files to edit manually
 
 If you prefer editing files directly instead of using `/setup`:
@@ -271,7 +284,8 @@ If you prefer editing files directly instead of using `/setup`:
 | `04-job-evaluation.md` | Skill match areas, career goals, motivation filters |
 | `05-cv-templates.md` | Profile statement templates for different role types |
 | `07-interview-prep.md` | Your STAR examples from actual experience |
-| `search-queries.md` | Job search queries for your skills and location |
+| `search-queries.md` | Job search queries (roles, titles, keywords) for your skills |
+| `job-search.config.yaml` | Run settings for `/scrape` + `/rank`: locations, employment types, extra sources, result count and files |
 
 ### Updating your search queries
 
