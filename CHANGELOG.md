@@ -47,6 +47,15 @@ per-file diff commands.
   `reports/` (git-ignored) even when the terminal view is capped, and it accepts
   `--status`, `--sort`, `--top`, and `--formats` for ad-hoc exports.
 
+- **Private, never-pushed settings** - `job-search.config.local.yaml` is git-ignored and
+  read by `/scrape` and `/rank` in preference to the tracked `job-search.config.yaml`, so
+  personal locations, preferences, and sources stay out of git while the tracked file
+  remains a clean template. Custom templates registered via `/add-template` (under
+  `templates/cv/` and `templates/cover_letters/`) and a new `private/` scratch folder are
+  git-ignored too. `templates/README.md` stays tracked. The profile files (`CLAUDE.md`,
+  `01`-`07`) are tracked templates that `.gitignore` cannot protect - the README and
+  SETUP now point a personal search at a private repository for those.
+
 ### Changed
 
 - **Result count is configurable** - `output.show` in the config sets how many jobs

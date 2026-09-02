@@ -272,6 +272,8 @@ Most of how `/scrape` and `/rank` behave is tuned from one commented file at the
 
 The result files are produced by `tools/export_jobs.py`, which is dependency-free and can also be run directly (e.g. `python3 tools/export_jobs.py --status ranked --sort score --top 50`). The first time a command runs it, Claude Code may ask once to approve `python3 tools/export_jobs.py`; to pre-approve it, add `Bash(python tools/export_jobs.py:*)` and `Bash(python3 tools/export_jobs.py:*)` to `.claude/settings.json` (and, to keep CI's `tools/security_guards.py` green, to that file's `ALLOWED_PERMISSIONS` set — the same paired-diff rule the shipped portal CLIs follow).
 
+**Keeping your settings private.** `job-search.config.yaml` is tracked in git, so anything in it can be pushed. If your locations, preferences, or sources are personal, copy it to **`job-search.config.local.yaml`** and edit that — it is git-ignored and never pushed, and `/scrape`/`/rank` read it in preference to the tracked file. The same applies to the profile itself: `CLAUDE.md` and the `01`–`07` skill files are *tracked* template files that `/setup` fills with your personal data, so `.gitignore` cannot stop them from being pushed — if this copy is for your own job search rather than for contributing changes back, use a **private repository** with this repo as `upstream` (see [SETUP.md section 8](SETUP.md#8-pulling-upstream-updates-into-your-fork)). A `private/` folder is also git-ignored for any other personal files you want to keep alongside the repo.
+
 ### Which files to edit manually
 
 If you prefer editing files directly instead of using `/setup`:

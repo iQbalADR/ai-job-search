@@ -47,10 +47,14 @@ Optional arguments:
 1. Read `job_scraper/seen_jobs.json` (create if missing - start with `{"seen": {}}`)
 2. Read `job_search_tracker.csv` to extract already-applied companies+roles
 3. Read `search-queries.md` (this directory) for the search strategy
-4. Read `job-search.config.yaml` (repo root) for run settings. Treat the whole
-   file and every key as optional - if it is missing, unreadable, or a key is
-   absent, use the default noted where that setting is consumed below. The
-   settings this skill reads:
+4. Read the run-settings config. Prefer `job-search.config.local.yaml` (repo
+   root) when it exists - it is git-ignored, so it is where a user keeps real
+   locations and preferences without pushing them - and otherwise read the
+   tracked `job-search.config.yaml`. Read only one (the local override replaces
+   the tracked file; do not merge them). Treat the whole file and every key as
+   optional - if neither exists, is unreadable, or a key is absent, use the
+   default noted where that setting is consumed below. The settings this skill
+   reads:
    - `search.locations` - location terms for portals and web-search queries
    - `search.posted_within_days` - the recency window (default 14)
    - `search.employment_types` - employment types to keep (default: all). See Step 1b.

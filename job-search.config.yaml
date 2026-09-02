@@ -11,6 +11,12 @@
 # indent with spaces (never tabs), and keep the `key: value` / `- item` shapes
 # shown below.
 #
+# KEEPING YOUR SETTINGS PRIVATE: this file is tracked in git, so anything you put
+# here can be pushed. If your locations, preferences, or sources are personal,
+# copy this file to `job-search.config.local.yaml` and edit that instead - it is
+# git-ignored and never pushed, and /scrape and /rank read it in preference to
+# this one. This tracked file then stays a clean template for sharing.
+#
 # Quick tour:
 #   search   - where and what to look for, and which employment types to keep
 #   output   - how many jobs to show in the terminal, and the files to write

@@ -28,7 +28,7 @@ Follow these steps **in order**.
 5. Read the scoring framework and profile **once**:
    - `.claude/skills/job-application-assistant/04-job-evaluation.md`
    - `.claude/skills/job-application-assistant/01-candidate-profile.md`
-6. Read `job-search.config.yaml` (repo root, optional) for `output.show` (the default shortlist size — see Step 0) and `output.write_files` / `output.formats` / `output.directory` (the Step 4.5 export). Any missing key uses its default.
+6. Read the run-settings config (optional): prefer the git-ignored `job-search.config.local.yaml` when it exists, otherwise the tracked `job-search.config.yaml` (read one, not both). Use it for `output.show` (the default shortlist size — see Step 0) and `output.write_files` / `output.formats` / `output.directory` (the Step 4.5 export). Any missing key uses its default.
 
 State how many jobs will be ranked before proceeding.
 
