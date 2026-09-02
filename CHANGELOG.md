@@ -53,8 +53,10 @@ per-file diff commands.
   remains a clean template. Custom templates registered via `/add-template` (under
   `templates/cv/` and `templates/cover_letters/`) and a new `private/` scratch folder are
   git-ignored too. `templates/README.md` stays tracked. The profile files (`CLAUDE.md`,
-  `01`-`07`) are tracked templates that `.gitignore` cannot protect - the README and
-  SETUP now point a personal search at a private repository for those.
+  `01`-`07`, `search-queries.md`, `cv/main_example.tex`) are tracked templates that
+  `.gitignore` cannot protect; the README and SETUP point a personal search at a private
+  repository for those, and a new `tools/private-profile.sh` (`on`/`off`/`status`) sets
+  git's `skip-worktree` bit on them so local edits are never staged or pushed on a clone.
 
 ### Changed
 
