@@ -155,8 +155,9 @@ Rules for the presentation:
 - A shortlisted job with `language_gate: FLAG` gets a ⚠ marker next to its Title (same treatment as a location FLAG) and its `language_note` quoted in that job's "Why these ranked highest" writeup, so the language-level gap is visible without digging into the raw JSON.
 - Every claim traces to fetched posting text or the profile - no invented details.
 - Say explicitly that these are **triage scores from the posting text only**, and that `/apply` will re-evaluate with company research before anything is drafted.
-- Then ask: "Want to apply to any of these? Give me the number(s) and I'll start with the full `/apply` workflow."
-- If the user picks one, run the `/apply` workflow on that job's URL, passing the triage verdict as prior context but **re-running the full Step 1 evaluation** - triage never substitutes for it.
+- Then ask: "Want to apply to any of these? Give me the number(s) and I'll start with the full `/apply` workflow. Already applied to one? Say 'mark 2 as applied' and I'll log it."
+- If the user picks one to apply, run the `/apply` workflow on that job's URL, passing the triage verdict as prior context but **re-running the full Step 1 evaluation** - triage never substitutes for it.
+- If the user says they already applied to a row, record it with `python3 tools/mark_applied.py "<that entry's url>"` (map the number to its `url` in `seen_jobs.json`). The tool sets the entry's status to `applied` and appends an `applied` row to `job_search_tracker.csv` without duplicating or downgrading an existing one, so it drops out of later `/scrape` and `/rank` runs. Pass `--channel`/`--note` if given, or `--seen-only` to skip the tracker row. Advancing an already-tracked application's status remains `/outcome`'s job.
 
 ---
 

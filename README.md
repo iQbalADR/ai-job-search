@@ -223,6 +223,7 @@ ai-job-search/
 │   ├── check_upstream_updates.py      # Preview which personalized files an upstream update touches
 │   ├── convert_salary_excel.py        # Convert salary Excel to JSON
 │   ├── export_jobs.py                 # Export scraped/ranked jobs to HTML + CSV (used by /scrape, /rank)
+│   ├── mark_applied.py                # Mark scraped/ranked jobs as applied (tracker row + seen_jobs status)
 │   ├── lint_skills.py                 # CI lint for skills, commands, settings.json
 │   ├── robots_check.py                # Gate the browser-header retry against robots.txt
 │   ├── security_guards.py             # CI guards: permission allowlist, gitignore rules, manifests
@@ -271,6 +272,8 @@ Most of how `/scrape` and `/rank` behave is tuned from one commented file at the
 - **`sources.extra`** — add job sources **beyond** the installed portal CLIs without writing a new skill: RSS/Atom feeds, a generic REST/JSON API (with a field map), `site:` web-search queries, or a direct careers page. This is the lightweight step between the WebSearch fallback and a full [`/add-portal`](#job-search-tools) skill; use `/add-portal` when you want a tested, reusable CLI for a board you search often.
 
 The result files are produced by `tools/export_jobs.py`, which is dependency-free and can also be run directly (e.g. `python3 tools/export_jobs.py --status ranked --sort score --top 50`). The first time a command runs it, Claude Code may ask once to approve `python3 tools/export_jobs.py`; to pre-approve it, add `Bash(python tools/export_jobs.py:*)` and `Bash(python3 tools/export_jobs.py:*)` to `.claude/settings.json` (and, to keep CI's `tools/security_guards.py` green, to that file's `ALLOWED_PERMISSIONS` set — the same paired-diff rule the shipped portal CLIs follow).
+
+**Marking jobs applied.** From a `/scrape` or `/rank` list, say "mark 3 as applied" (or name the job) and it's recorded via `tools/mark_applied.py` — an `applied` row is appended to `job_search_tracker.csv` and the job's `seen_jobs.json` status is set to `applied`, so it drops out of future scrapes/rankings and appears in `/html-report`. This is the quick path for a job you applied to directly (outside `/apply`); it never duplicates or downgrades a tracked application (advancing an existing one stays `/outcome`'s job). Run it directly too: `python3 tools/mark_applied.py <url> [--channel linkedin] [--note "…"] [--seen-only]`.
 
 **Keeping your settings private.** `job-search.config.yaml` is tracked in git, so anything in it can be pushed. If your locations, preferences, or sources are personal, copy it to **`job-search.config.local.yaml`** and edit that — it is git-ignored and never pushed, and `/scrape`/`/rank` read it in preference to the tracked file. The same applies to the profile itself: `CLAUDE.md`, the `01`–`07` skill files, `search-queries.md`, and `cv/main_example.tex` are *tracked* template files that `/setup` fills with your personal data, so `.gitignore` cannot stop them from being pushed. Two options:
 

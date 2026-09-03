@@ -47,6 +47,16 @@ per-file diff commands.
   `reports/` (git-ignored) even when the terminal view is capped, and it accepts
   `--status`, `--sort`, `--top`, and `--formats` for ad-hoc exports.
 
+- **Mark scraped/ranked jobs as applied** - from a `/scrape` or `/rank` list you can now say
+  "mark 3 as applied" (or name the job) and it is recorded via the new `tools/mark_applied.py`:
+  an `applied` row is appended to `job_search_tracker.csv` (canonical header created if the file
+  is new) and the job's `seen_jobs.json` status is set to `applied`, so it drops out of future
+  `/scrape` and `/rank` runs and appears in `/html-report`. Jobs are named by URL, seen key, or a
+  unique title/URL substring; resolution is atomic (nothing is written if any identifier is
+  missing or ambiguous). It never duplicates or downgrades an existing tracker row — advancing an
+  already-tracked application stays `/outcome`'s job — and `--seen-only` updates only the scrape
+  state. This is the quick path for an application made outside `/apply`. Covered by
+  `tests/test_mark_applied.py` (17 cases).
 - **Cross-portal near-duplicate collapsing** - the same job posted on several boards, or
   under a company alias ("Kotak" vs "Kotak Mahindra Bank"), slipped past exact URL /
   company+title dedup and showed as separate rows. `tools/export_jobs.py` now collapses

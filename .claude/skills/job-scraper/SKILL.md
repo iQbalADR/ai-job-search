@@ -5,7 +5,7 @@ description: >
   (LinkedIn, local job boards, and any skills added with /add-portal). Deduplicates
   across runs. Triggers on: job scrape, find jobs, search jobs, new jobs, job search,
   scrape jobs, /scrape
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash(bun --version), Bash(bun run .agents/skills/*/cli/src/cli.ts *), Bash(python3 tools/export_jobs.py *), Bash(python tools/export_jobs.py *), WebFetch, WebSearch, Agent, AskUserQuestion
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash(bun --version), Bash(bun run .agents/skills/*/cli/src/cli.ts *), Bash(python3 tools/export_jobs.py *), Bash(python tools/export_jobs.py *), Bash(python3 tools/mark_applied.py *), Bash(python tools/mark_applied.py *), WebFetch, WebSearch, Agent, AskUserQuestion
 ---
 
 # Job Scraper
@@ -202,7 +202,7 @@ For each new job, do a rapid fit check (NOT the full evaluation from `04-job-eva
       "posted_date": "YYYY-MM-DD" | null,
       "deadline": "YYYY-MM-DD" | null,
       "fit": "high/medium/low",
-      "status": "new/skipped/ranked/expired",
+      "status": "new/skipped/ranked/expired/applied",
       "portal": "<source portal skill, e.g. jobindex-search>",
       "source": "cli/websearch/rss/api/url",
       "source_name": "<extra-source name from config, when source is rss/api/url>",
@@ -219,6 +219,8 @@ The `source` field records which mechanism produced the entry: `cli` for Step 1b
 The `source_name` field names the `sources.extra` entry (from `job-search.config.yaml`) that produced a Step 1d job, so `rss`/`api`/`url` results can be attributed to a specific feed or page rather than just their type. Omit it for portal-CLI and WebSearch entries. `employment_type` records the posting's employment type when it is known — from a portal's structured output, a source's `employment_types` tag, or the Step 2 detail fetch — using the shared vocabulary (full-time, part-time, contract, freelance, temporary, internship). A missing key means it was not determined; **never infer it** from the title alone, and never backfill by guessing. Both fields are additive: entries predating them simply lack them, and readers tolerate the absence.
 
 `/rank` extends this schema additively: ranked entries also carry `rank_score` (0–100 overall score), `rank_verdict` (fit band, e.g. "strong fit"), `rank_date` (ISO date of ranking), the veto fields `location_verdict` and `language_gate` (both PASS/FAIL/FLAG) with `language_note` (the quoted requirement explaining a non-PASS), and `strengths`/`gaps` (1-3 verbatim bullets each, copied from the scoring agent's findings). The `status` field is set to `"ranked"`. Do not drop any of these fields when re-writing entries. Entries ranked before `strengths`/`gaps` existed simply lack them; readers tolerate their absence and never backfill by guessing. Entries ranked before the verdict rename may carry a legacy PASS/FAIL/FLAG string in `location` - read that as the verdict when `location_verdict` is absent; in fresh entries `location` is always a place, never a verdict.
+
+`applied` is set by the mark-applied path (Step 5's offer, via `tools/mark_applied.py`): it records that the user applied to a posting, so the entry is treated as already-handled and never re-presented. It is a mirror of the authoritative record — the tracker row the same tool writes — kept on the entry so the scrape state and the exported files agree. The tool also stores `applied_date` (ISO date). `/rank` skips `applied` entries the same way it skips `ranked` ones.
 
 `deadline` is a base field rather than a `/rank` extension: Step 2's detail fetch already extracts the application deadline, so it is written when the job is first seen and refreshed by `/rank` Step 4 when a scoring agent returns a different value. `null` means the posting states no deadline; a missing key means the entry predates this field - **never infer a deadline** from either, and never backfill by guessing.
 
@@ -328,9 +330,17 @@ LinkedIn search links:
 ```
 
 After presenting, ask:
-> "Want me to evaluate any of these in detail? Just give me the number(s)."
+> "Want me to evaluate any of these in detail? Just give me the number(s). Already applied to any? Say 'mark 3 as applied' and I'll log it."
 
-If the user picks a number, invoke the **job-application-assistant** skill workflow (fit evaluation first, then CV + cover letter if approved).
+If the user picks a number to evaluate, invoke the **job-application-assistant** skill workflow (fit evaluation first, then CV + cover letter if approved).
+
+**Marking jobs applied.** When the user says they applied to one or more rows (e.g. "mark 3 and 5 as applied", or names a job), record it with the mark-applied tool rather than editing files by hand. Map each row number to that entry's `url` (the stable identifier) and run:
+
+```bash
+python3 tools/mark_applied.py "<url>" ["<url>" ...]
+```
+
+The tool sets the entry's `status` to `applied` in `seen_jobs.json` and appends an `applied` row to `job_search_tracker.csv` (creating the canonical header if the file is new), so the job is excluded from future `/scrape` and `/rank` runs and shows up in `/html-report`. It never duplicates or downgrades an existing tracker row — a job already tracked is left for `/outcome` to advance. Pass `--channel <how>` (default `direct`) or `--note "<text>"` if the user gives that context; use `--seen-only` if they explicitly want the scrape state updated without a tracker row. This is the quick path for an application made outside `/apply`; the full `/apply` workflow still writes its own tracker row as before.
 
 If the run found many new jobs (roughly 8+), also suggest `/rank` - it batch-scores all new postings against the full fit framework and returns a ranked shortlist, which beats eyeballing a long table. (`/rank` sets the `ranked` and `expired` status values in `seen_jobs.json`; treat both as already-seen for dedup purposes.)
 
@@ -360,7 +370,7 @@ After the files are written, tell the user where they are, e.g.:
 
 ### Step 6: Update Tracker (Optional)
 
-If the user decides to apply to any job, the tracker row is written by **job-application-assistant Step 3b**, which Step 5 already routes into - do not add a second row here. Only when the user says they applied to something outside that path, add a row using the header and the match-then-update rule in `/outcome` Step 1.
+If the user decides to apply to any job, the tracker row is written by **job-application-assistant Step 3b**, which Step 5 already routes into - do not add a second row here. When the user says they applied to something outside that path, use the mark-applied tool (Step 5's "Marking jobs applied") - `tools/mark_applied.py` writes the row with the canonical header and will not duplicate an existing one; for advancing an *already-tracked* application's status, that stays `/outcome`'s job.
 
 ---
 
