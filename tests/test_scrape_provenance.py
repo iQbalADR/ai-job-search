@@ -37,9 +37,10 @@ class ScrapeProvenanceSpec(unittest.TestCase):
     def test_schema_block_carries_source_field(self):
         step4 = self.steps.get("Step 4: Deduplicate & Store", "")
         self.assertIn(
-            '"source": "cli/websearch"',
+            '"source": "cli/websearch/rss/api/url"',
             step4,
-            "the seen_jobs.json schema block lost the source (provenance) field",
+            "the seen_jobs.json schema block lost the source (provenance) field "
+            "(the enum lists cli/websearch plus the rss/api/url extra-source mechanisms)",
         )
 
     def test_source_field_is_additive_and_never_backfilled(self):

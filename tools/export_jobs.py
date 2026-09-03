@@ -22,8 +22,9 @@ Usage:
 By default it reads job_scraper/seen_jobs.json and writes reports/job-matches.html
 and reports/job-matches.csv (the reports/ folder is git-ignored). Jobs the pipeline
 marked expired/dead are dropped unless --include-expired; pass --max-age-days to also
-drop stale postings by date. The written files contain the full filtered list; --top
-only caps the file when you ask it to.
+drop stale postings by date. Near-duplicate postings (the same role cross-posted on
+several boards or under a company alias) are collapsed into one row unless --no-dedupe.
+The written files contain the full filtered list; --top only caps the file when asked.
 """
 
 from __future__ import annotations
@@ -32,6 +33,7 @@ import argparse
 import csv
 import html
 import json
+import re
 import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -98,6 +100,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "Omit for no age filter. Jobs with no known date are kept (never guessed).",
     )
     p.add_argument(
+        "--no-dedupe", action="store_true",
+        help="Keep near-duplicate postings (same role cross-posted on several boards "
+        "or under a company alias). By default they are collapsed into one row.",
+    )
+    p.add_argument(
         "--sort", default="score", choices=["score", "fit", "date", "deadline", "company"],
         help="Sort order (default: score, which falls back to fit for unranked jobs).",
     )
@@ -132,12 +139,18 @@ def load_jobs(path: Path) -> list[dict[str, Any]]:
 
 
 def source_label(rec: dict[str, Any]) -> str:
-    """A short 'where this came from' label: the portal, or the extra source name."""
+    """A short 'where this came from' label: the portal, or the extra source name.
+    When this row absorbed cross-posted duplicates, the other sources are noted."""
     portal = rec.get("portal") or rec.get("source_name")
     source = rec.get("source")
     if portal and source and source != "cli":
-        return f"{portal} ({source})"
-    return portal or source or "—"
+        label = f"{portal} ({source})"
+    else:
+        label = portal or source or "—"
+    others = rec.get("_dupe_sources")
+    if others:
+        label = f"{label} +{len(others)} ({', '.join(others)})"
+    return label
 
 
 def sort_key(strategy: str):
@@ -188,6 +201,118 @@ def filter_jobs(jobs: list[dict[str, Any]], statuses: str) -> list[dict[str, Any
 def drop_expired(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Remove jobs the pipeline has marked dead - a closed posting is noise."""
     return [j for j in jobs if str(j.get("status", "")).lower() != "expired"]
+
+
+# Company-name tokens that carry no identity - legal-entity suffixes and a few
+# generic corporate words. Dropped before comparing so "Kotak Mahindra Bank" and
+# "Kotak" (or "IDC Technologies Pte Ltd" and "IDC Technologies") can match.
+COMPANY_STOPWORDS = frozenset({
+    "ltd", "limited", "inc", "incorporated", "llc", "plc", "corp", "corporation",
+    "co", "company", "gmbh", "ag", "sa", "srl", "bv", "nv", "oy", "ab", "aps",
+    "as", "pte", "pty", "llp", "lp", "kk", "group", "holdings", "holding", "the",
+})
+
+
+def _tokens(text: str) -> list[str]:
+    """Lowercase alphanumeric tokens; punctuation and separators become breaks."""
+    return re.findall(r"[a-z0-9]+", text.lower())
+
+
+def company_tokens(name: Any) -> frozenset[str]:
+    """Identity tokens of a company name, with legal/generic suffixes removed.
+    Empty when nothing meaningful remains (then it never matches another)."""
+    if not name:
+        return frozenset()
+    return frozenset(t for t in _tokens(str(name)) if t not in COMPANY_STOPWORDS)
+
+
+def normalize_title(title: Any) -> str:
+    """A title reduced for comparison: parentheticals dropped, punctuation folded
+    to single spaces, lowercased. Conservative - it does not reorder words - so it
+    merges 'Senior iOS Dev' with 'Senior iOS Dev (Remote)' but not unrelated roles."""
+    if not title:
+        return ""
+    text = re.sub(r"\([^)]*\)", " ", str(title))
+    return " ".join(_tokens(text))
+
+
+def company_related(a: frozenset[str], b: frozenset[str]) -> bool:
+    """True when two company token sets plausibly name the same employer: equal,
+    or one is a subset of the other ('kotak' ⊆ 'kotak mahindra'). Empty sets never
+    match - absence of a name is not evidence of sameness."""
+    if not a or not b:
+        return False
+    return a == b or a <= b or b <= a
+
+
+def _completeness(rec: dict[str, Any]) -> int:
+    """How many of the display fields are filled - used to pick the record to keep
+    from a duplicate cluster when scores tie."""
+    return sum(1 for _, key in COLUMNS if key not in ("_source",) and rec.get(key))
+
+
+def dedupe(jobs: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], int]:
+    """Collapse near-duplicate postings (same normalized title + related company,
+    e.g. the same job cross-posted on two boards or under a company alias) into one
+    row, preserving first-appearance order. The kept row is the highest-scored /
+    most-complete of the cluster; the others' sources are recorded on it for a note.
+    Returns (deduped, merged_count)."""
+    n = len(jobs)
+    keys = [(normalize_title(j.get("title")), company_tokens(j.get("company"))) for j in jobs]
+
+    # Union-find over records that share a normalized title and a related company.
+    parent = list(range(n))
+
+    def find(i: int) -> int:
+        while parent[i] != i:
+            parent[i] = parent[parent[i]]
+            i = parent[i]
+        return i
+
+    def union(i: int, j: int) -> None:
+        parent[find(i)] = find(j)
+
+    by_title: dict[str, list[int]] = {}
+    for i, (tkey, _) in enumerate(keys):
+        if tkey:  # an empty title carries no identity - never merge on it
+            by_title.setdefault(tkey, []).append(i)
+    for idxs in by_title.values():
+        for a in range(len(idxs)):
+            for b in range(a + 1, len(idxs)):
+                if company_related(keys[idxs[a]][1], keys[idxs[b]][1]):
+                    union(idxs[a], idxs[b])
+
+    clusters: dict[int, list[int]] = {}
+    for i in range(n):
+        clusters.setdefault(find(i), []).append(i)
+
+    def score(rec: dict[str, Any]) -> float:
+        s = rec.get("rank_score")
+        return s if isinstance(s, (int, float)) else -1
+
+    out: list[dict[str, Any]] = []
+    merged = 0
+    emitted: set[int] = set()
+    for i in range(n):  # iterate in original order so output is stable
+        root = find(i)
+        if root in emitted:
+            continue
+        emitted.add(root)
+        members = clusters[root]
+        if len(members) == 1:
+            out.append(jobs[i])
+            continue
+        # Keep the best member (highest score, then most complete, then earliest).
+        best = max(members, key=lambda m: (score(jobs[m]), _completeness(jobs[m]), -m))
+        kept = dict(jobs[best])
+        others = [m for m in members if m != best]
+        kept["_dupe_count"] = len(others)
+        kept["_dupe_sources"] = sorted(
+            {source_label(jobs[m]) for m in others} - {source_label(jobs[best])}
+        )
+        out.append(kept)
+        merged += len(others)
+    return out, merged
 
 
 def freshness_date(rec: dict[str, Any]) -> date | None:
@@ -510,6 +635,11 @@ def main(argv: list[str]) -> int:
         jobs = filter_by_age(jobs, args.max_age_days)
         dropped_stale = before - len(jobs)
 
+    # Collapse near-duplicate postings (same role on several boards / company alias).
+    merged_dupes = 0
+    if not args.no_dedupe:
+        jobs, merged_dupes = dedupe(jobs)
+
     key_fn, reverse = sort_key(args.sort)
     jobs.sort(key=key_fn, reverse=reverse)
     jobs = cap_top(jobs, args.top)
@@ -527,10 +657,12 @@ def main(argv: list[str]) -> int:
 
     notes = []
     if dropped_expired:
-        notes.append(f"{dropped_expired} expired")
+        notes.append(f"dropped {dropped_expired} expired")
     if dropped_stale:
-        notes.append(f"{dropped_stale} older than {args.max_age_days}d")
-    suffix = f" (from {total}; dropped {', '.join(notes)})" if notes else ""
+        notes.append(f"dropped {dropped_stale} older than {args.max_age_days}d")
+    if merged_dupes:
+        notes.append(f"merged {merged_dupes} duplicate(s)")
+    suffix = f" (from {total}; {'; '.join(notes)})" if notes else ""
     print(f"Exported {len(jobs)} job(s){suffix}:")
     for path in written:
         try:

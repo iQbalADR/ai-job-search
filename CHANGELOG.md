@@ -47,6 +47,16 @@ per-file diff commands.
   `reports/` (git-ignored) even when the terminal view is capped, and it accepts
   `--status`, `--sort`, `--top`, and `--formats` for ad-hoc exports.
 
+- **Cross-portal near-duplicate collapsing** - the same job posted on several boards, or
+  under a company alias ("Kotak" vs "Kotak Mahindra Bank"), slipped past exact URL /
+  company+title dedup and showed as separate rows. `tools/export_jobs.py` now collapses
+  them: records whose titles match after normalizing (parentheticals/decorations dropped,
+  punctuation folded) **and** whose companies are token-related (one's significant words a
+  subset of the other's, after dropping legal/generic suffixes) become one row, keeping the
+  highest-scored / most-complete entry and noting the other sources. Two genuinely different
+  companies are never merged on a title match. `--no-dedupe` disables it. `/scrape` Step 2
+  applies the same rule at scrape time so results and files agree. Locked in by
+  `tests/test_export_jobs.py` (39 cases covering the filters, normalization, and dedup).
 - **Private, never-pushed settings** - `job-search.config.local.yaml` is git-ignored and
   read by `/scrape` and `/rank` in preference to the tracked `job-search.config.yaml`, so
   personal locations, preferences, and sources stay out of git while the tracked file

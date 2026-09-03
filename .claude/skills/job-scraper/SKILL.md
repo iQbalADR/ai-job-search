@@ -170,6 +170,7 @@ fragment link.
 For every candidate:
 - Skip if the URL or company+title combo already exists in `seen_jobs.json`
 - Skip if the company+role already appears in `job_search_tracker.csv`
+- **Skip cross-portal near-duplicates.** The same job is often posted on several boards and by a company alias, so exact URL/company+title matching misses it (e.g. "Kotak" on one board and "Kotak Mahindra Bank" on another, same role). Treat two candidates as the same job — keep one, drop the other — when their **titles match after normalizing** (lowercase, drop parenthetical/location decorations like "(Remote)", fold punctuation) **and their companies are related** (one company's significant words are a subset of the other's, after dropping legal/generic suffixes like Ltd, Inc, Pte, GmbH, Group). Keep the richer entry (more fields, or the higher `/rank` score if already ranked) and note the other source. This is the same rule `tools/export_jobs.py` applies when writing the files, so results and files agree; do not merge two *different* companies just because the title matches.
 
 ### Step 2.5: Mass-Posting Detection (within this run)
 
