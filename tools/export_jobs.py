@@ -10,16 +10,20 @@ Dependency-free (Python standard library only) and self-contained: the HTML embe
 its own CSS and JavaScript, so it opens offline in any browser.
 
 Usage:
-    python3 tools/export_jobs.py                       # export everything
+    python3 tools/export_jobs.py                       # export everything live
     python3 tools/export_jobs.py --status new          # only newly scraped jobs
     python3 tools/export_jobs.py --status ranked --sort score
+    python3 tools/export_jobs.py --max-age-days 14     # drop postings older than 14 days
+    python3 tools/export_jobs.py --include-expired     # keep dead postings too
     python3 tools/export_jobs.py --top 50              # cap the file to the best 50
     python3 tools/export_jobs.py --formats html        # HTML only
     python3 tools/export_jobs.py --basename job-ranking --title "Job Ranking"
 
 By default it reads job_scraper/seen_jobs.json and writes reports/job-matches.html
-and reports/job-matches.csv (the reports/ folder is git-ignored). The written files
-always contain the full filtered list; --top only caps the file when you ask it to.
+and reports/job-matches.csv (the reports/ folder is git-ignored). Jobs the pipeline
+marked expired/dead are dropped unless --include-expired; pass --max-age-days to also
+drop stale postings by date. The written files contain the full filtered list; --top
+only caps the file when you ask it to.
 """
 
 from __future__ import annotations
@@ -29,7 +33,7 @@ import csv
 import html
 import json
 import sys
-from datetime import datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -82,6 +86,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--status", default="all",
         help="Comma-separated statuses to include (new, ranked, skipped, expired) "
         "or 'all' (default: all).",
+    )
+    p.add_argument(
+        "--include-expired", action="store_true",
+        help="Include jobs marked expired/dead. By default they are dropped, since a "
+        "closed posting is noise (pass --status expired to list only those).",
+    )
+    p.add_argument(
+        "--max-age-days", type=int, default=None,
+        help="Drop jobs whose posting date (or first-seen date) is older than N days. "
+        "Omit for no age filter. Jobs with no known date are kept (never guessed).",
     )
     p.add_argument(
         "--sort", default="score", choices=["score", "fit", "date", "deadline", "company"],
@@ -157,11 +171,49 @@ def sort_key(strategy: str):
     return strategies[strategy]
 
 
-def filter_jobs(jobs: list[dict[str, Any]], statuses: str) -> list[dict[str, Any]]:
+def wanted_statuses(statuses: str) -> set[str] | None:
+    """The requested status set, or None for 'all'."""
     if statuses.strip().lower() == "all":
+        return None
+    return {s.strip().lower() for s in statuses.split(",") if s.strip()}
+
+
+def filter_jobs(jobs: list[dict[str, Any]], statuses: str) -> list[dict[str, Any]]:
+    wanted = wanted_statuses(statuses)
+    if wanted is None:
         return jobs
-    wanted = {s.strip().lower() for s in statuses.split(",") if s.strip()}
     return [j for j in jobs if str(j.get("status", "")).lower() in wanted]
+
+
+def drop_expired(jobs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Remove jobs the pipeline has marked dead - a closed posting is noise."""
+    return [j for j in jobs if str(j.get("status", "")).lower() != "expired"]
+
+
+def freshness_date(rec: dict[str, Any]) -> date | None:
+    """The date to age a job by: its posting date, else when it was first seen.
+    Returns None when neither parses as YYYY-MM-DD (never guessed)."""
+    for key in ("posted_date", "first_seen"):
+        raw = rec.get(key)
+        if not raw:
+            continue
+        try:
+            return date.fromisoformat(str(raw)[:10])
+        except ValueError:
+            continue
+    return None
+
+
+def filter_by_age(jobs: list[dict[str, Any]], max_age_days: int) -> list[dict[str, Any]]:
+    """Drop jobs older than max_age_days. A job with no parseable date is kept -
+    absence of a date is not evidence the posting is stale."""
+    cutoff = date.today() - timedelta(days=max_age_days)
+    kept = []
+    for j in jobs:
+        d = freshness_date(j)
+        if d is None or d >= cutoff:
+            kept.append(j)
+    return kept
 
 
 def cap_top(jobs: list[dict[str, Any]], top: str) -> list[dict[str, Any]]:
@@ -437,7 +489,27 @@ def main(argv: list[str]) -> int:
         sys.exit(f"unknown format(s): {', '.join(sorted(unknown))} — supported: html, csv")
 
     jobs = load_jobs(args.input)
+    total = len(jobs)
     jobs = filter_jobs(jobs, args.status)
+
+    # Drop dead postings unless the caller opted in, or explicitly asked for only
+    # expired ones (--status expired). A closed job is noise in a matches export.
+    wanted = wanted_statuses(args.status)
+    asked_only_expired = wanted is not None and wanted == {"expired"}
+    dropped_expired = 0
+    if not args.include_expired and not asked_only_expired:
+        before = len(jobs)
+        jobs = drop_expired(jobs)
+        dropped_expired = before - len(jobs)
+
+    # Drop stale postings past the freshness window (by posting date, else
+    # first-seen). Undated jobs are kept - absence of a date is not staleness.
+    dropped_stale = 0
+    if args.max_age_days is not None:
+        before = len(jobs)
+        jobs = filter_by_age(jobs, args.max_age_days)
+        dropped_stale = before - len(jobs)
+
     key_fn, reverse = sort_key(args.sort)
     jobs.sort(key=key_fn, reverse=reverse)
     jobs = cap_top(jobs, args.top)
@@ -453,7 +525,13 @@ def main(argv: list[str]) -> int:
         html_path.write_text(render_html(jobs, args.title, args.input), encoding="utf-8")
         written.append(html_path)
 
-    print(f"Exported {len(jobs)} job(s):")
+    notes = []
+    if dropped_expired:
+        notes.append(f"{dropped_expired} expired")
+    if dropped_stale:
+        notes.append(f"{dropped_stale} older than {args.max_age_days}d")
+    suffix = f" (from {total}; dropped {', '.join(notes)})" if notes else ""
+    print(f"Exported {len(jobs)} job(s){suffix}:")
     for path in written:
         try:
             print(f"  {path.resolve().relative_to(ROOT)}")

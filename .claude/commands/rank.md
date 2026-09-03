@@ -104,9 +104,10 @@ files hold every ranked job, sorted by score, with clickable links and each job'
 strengths and gaps. This is the sortable, browsable copy of a long ranking.
 
 ```bash
-python3 tools/export_jobs.py --status ranked --sort score --basename job-ranking --title "Job Ranking - <YYYY-MM-DD>"
+python3 tools/export_jobs.py --status ranked --sort score --max-age-days <posted_within_days> --basename job-ranking --title "Job Ranking - <YYYY-MM-DD>"
 ```
 
+- Pass `--max-age-days` set to `search.posted_within_days` (default **14**) so a stale posting never lands in the ranking file. The exporter drops `expired` jobs by default — including the ones this run's scoring agents and the Step 3 sweep just retired — so dead postings stay out of the file automatically.
 - Respect `output.formats` (default `html,csv`) via `--formats <list>` and `output.directory` (default `reports`) via `--out-dir <dir>`. Default output: `reports/job-ranking.html` and `reports/job-ranking.csv` (the `reports/` folder is git-ignored). Using a distinct basename from `/scrape`'s `job-matches` keeps the two exports from overwriting each other.
 - If `python3` is unavailable, fall back to `python`; if neither is present, note it and skip the export rather than failing the command.
 

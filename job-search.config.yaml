@@ -89,6 +89,11 @@ output:
     - html
     - csv
 
+  # The written files exclude postings marked dead (closed at the source) and, by
+  # honoring the search.posted_within_days window above, postings older than it -
+  # so a file never shows a stale or already-closed job. (Run /rank to liveness-
+  # check every scraped posting; /scrape only verifies the ones it looks at closely.)
+
   # Directory the files are written to (created if missing). This folder is
   # git-ignored, so your job results are never committed.
   directory: reports

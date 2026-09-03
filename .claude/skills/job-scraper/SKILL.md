@@ -137,15 +137,23 @@ and URL. For jobs worth a deeper look, fetch full detail with that portal's `det
 command (see its SKILL.md — do not guess flags) to extract **key requirements**,
 **application deadline**, and a brief description snippet.
 
-**Closed-at-source detection:** `linkedin-search detail` also returns `isActive`.
-`false` means the posting page itself renders LinkedIn's "No longer accepting
-applications" banner — the job died between being indexed and being fetched (expired
-LinkedIn URLs redirect to *similar live jobs*, so a search hit can be a ghost). Mark
-such a job, never silently drop it: write its entry to `seen_jobs.json` in Step 4 with
-`"status": "expired"` and leave it out of the Step 5 presentation — an absent entry
-looks identical to a job never seen, and the recorded status is what makes a later
-ghost report self-triaging. `isActive: true` is only the absence of that banner, not
-proof the posting is open; deadlines and dead URLs remain `/rank`'s job.
+**Closed-at-source detection (all portals and sources).** A posting can die between
+being indexed and being fetched — a search index or feed is often days stale, and
+job boards remove or close listings well before their posting date ages out of the
+recency window. Whenever you fetch a job's detail or its posting URL, check the
+fetched content for dead-posting markers and, when one is present, mark the job
+`"status": "expired"` in Step 4 and **leave it out of the Step 5 presentation**.
+Never silently drop it: an absent entry looks identical to a job never seen, and the
+recorded status is what makes a later ghost report self-triaging.
+
+- **LinkedIn:** `linkedin-search detail` returns `isActive: false` when the page renders LinkedIn's "No longer accepting applications" banner (expired LinkedIn URLs redirect to *similar live* jobs, so a search hit can be a ghost).
+- **Any other portal / WebSearch / extra source:** treat the posting as expired when the fetched page shows a closed-listing marker — e.g. "no longer advertised" (SEEK), "no longer accepting applications", "this job has expired", "position has been filled", "applications are closed", "vacancy withdrawn" — or when the URL returns **HTTP 404/410**, or **redirects to a listing/search/home page** instead of a single posting. Match these as visible page state, not as text quoted inside a live posting's own description (recruiter boilerplate quotes these phrases): scope the check to the posting header/status area, the same discipline `linkedin-search` uses for its banner.
+
+A positive liveness signal (no marker found) is only the *absence* of evidence, not
+proof the posting is open; hard deadlines and subtler dead URLs remain `/rank`'s job.
+Because this now covers every source, a recently-posted but already-closed job (the
+common case a date filter cannot catch) is marked expired at scrape time instead of
+being presented as live.
 
 **From WebSearch results:** Use `WebFetch` on the posting URL and extract the same
 fields manually. If it returns HTTP 403, retry with browser headers via curl per
@@ -258,7 +266,15 @@ Scraper-based portal CLIs rot silently: when a portal changes its markup, the pa
 
 ### Step 5: Present Results
 
-Present new jobs in a table sorted by fit (high first). **How many rows to show is
+Present new jobs in a table sorted by fit (high first). **Only present live jobs
+within the freshness window:** never present a job marked `expired` by Step 2's
+closed-at-source detection, and never present one whose stored `posted_date` is older
+than `search.posted_within_days` (default 14) — a stored entry can predate this run,
+so re-check the date here rather than trusting that Step 1b already filtered it. A job
+with no known `posted_date` is kept (absence of a date is not staleness), and dead
+URLs with no visible marker remain `/rank`'s job.
+
+**How many rows to show is
 set by `output.show` in `job-search.config.yaml`** (default `top10`): `all` shows
 every match, `topN` / a bare number shows that many, and anything else falls back
 to `top10`. This caps only the **terminal** table — the written files in Step 5.5
@@ -330,9 +346,10 @@ Run the exporter, which is dependency-free and writes a self-contained HTML page
 (sortable, filterable, clickable links) and a CSV:
 
 ```bash
-python3 tools/export_jobs.py --status new --sort fit --basename job-matches --title "Job Matches - <YYYY-MM-DD>"
+python3 tools/export_jobs.py --status new --sort fit --max-age-days <posted_within_days> --basename job-matches --title "Job Matches - <YYYY-MM-DD>"
 ```
 
+- Pass `--max-age-days` set to `search.posted_within_days` (default **14**) so the files honor the same freshness window as the search and never show a posting older than the window. The exporter also drops jobs marked `expired` by default (Step 2's closed-at-source detection), so dead postings stay out of the files without any extra flag.
 - Respect `output.formats` (default `html,csv`) by passing `--formats <list>`, and `output.directory` (default `reports`) by passing `--out-dir <dir>`. The default output is `reports/job-matches.html` and `reports/job-matches.csv` (the `reports/` folder is git-ignored).
 - `--status new` writes just this run's new matches; if the user asked to see everything, use `--status all` instead.
 - If `python3` is unavailable, fall back to `python`; if neither is present, note it and skip the export rather than failing the run.

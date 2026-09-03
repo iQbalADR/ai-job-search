@@ -82,6 +82,20 @@ per-file diff commands.
 
 ### Fixed
 
+- **Scraped results no longer surface stale or already-closed postings** - a job can go
+  dead before its posting date ages out of the recency window (a listing removed after a
+  few days), and the export was a raw dump of `seen_jobs.json`, so closed and stale jobs
+  showed up in the files. Closed-at-source detection is generalized beyond LinkedIn: when
+  `/scrape` fetches a posting (any portal, WebSearch, or extra source) it now marks the
+  job `expired` on a dead-page marker ("no longer advertised" on SEEK, "no longer accepting
+  applications", "position filled", HTTP 404/410, or a redirect to a listing page) and
+  leaves it out of the presentation. `/scrape` Step 5 also drops any job whose stored
+  `posted_date` is older than `search.posted_within_days`. `tools/export_jobs.py` now
+  excludes `expired` jobs by default (`--include-expired` to keep them, `--status expired`
+  to list only those) and takes `--max-age-days` to drop stale postings by date; `/scrape`
+  and `/rank` pass the freshness window to it. Undated jobs are kept (absence of a date is
+  not staleness, never guessed).
+
 - **`linkedin-search detail` accepts LinkedIn job URLs with trailing slashes** (#411) -
   passing a job URL with a trailing slash (e.g., `https://www.linkedin.com/jobs/view/<id>/`
   or a slugged variant with or without query strings) failed validation and exited 1 with
