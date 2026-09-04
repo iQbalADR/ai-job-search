@@ -90,6 +90,28 @@ describe("LinkedIn CLI flag validation", () => {
     });
   });
 
+  describe("--employment-type validation", () => {
+    // These are network-free: an unknown flag would return UNKNOWN_FLAG (proving
+    // --employment-type / -t is a registered flag), and an unrecognized *value*
+    // returns BAD_ARG from validation, both before any fetch. A recognized value
+    // is exercised network-free by the employmentTypeFlag unit tests in
+    // parsing.test.ts, so no live-search assertion is needed here.
+    test("an unrecognized type exits 1 with BAD_ARG (never a silent unfiltered search)", async () => {
+      const result = await runCLI(["search", "-l", LOCATION, "--employment-type", "seasonal"]);
+      expect(result.exitCode).not.toBe(0);
+      const err = parsedStderr(result.stderr);
+      expect(err.code).toBe("BAD_ARG");
+      expect(err.error).toMatch(/employment type/);
+    });
+
+    test("the -t alias resolves to --employment-type (a bad value still validates, not UNKNOWN_FLAG)", async () => {
+      const result = await runCLI(["search", "-l", LOCATION, "-t", "seasonal"]);
+      expect(result.exitCode).not.toBe(0);
+      const err = parsedStderr(result.stderr);
+      expect(err.code).toBe("BAD_ARG");
+    });
+  });
+
   describe("--page NaN validation", () => {
     test("non-numeric string exits 1 with BAD_ARG", async () => {
       const result = await runCLI(["search", "-l", LOCATION, "--page", "abc"]);

@@ -9,7 +9,7 @@
 
 import { runSearch, DESCRIPTION_FORMATS, type DescriptionFormat, type SearchOpts } from "./commands/search.js"
 import { runDetail, type DetailOpts } from "./commands/detail.js"
-import { baseUrl } from "./helpers.js"
+import { baseUrl, employmentTypeFacet } from "./helpers.js"
 
 interface Flags {
   _: string[]
@@ -17,7 +17,7 @@ interface Flags {
 }
 
 // Short-flag aliases.
-const ALIAS: Record<string, string> = { q: "query", n: "limit" }
+const ALIAS: Record<string, string> = { q: "query", n: "limit", t: "employment-type" }
 
 function parseFlags(argv: string[]): Flags {
   const flags: Flags = { _: [] }
@@ -93,6 +93,8 @@ FACET FILTERS (values from freehire.me's controlled vocabularies; comma = OR)
   --seniority <levels>    junior, middle, senior, staff, principal, lead, ...
   --category <cats>       backend, frontend, fullstack, devops, ml_ai, qa, ...
   --skill <names>         Canonical skill(s), e.g. --skill go,kubernetes
+  --employment-type, -t   Employment type(s), comma = OR. Values: full-time, part-time,
+                          contract, freelance, internship. (freelance -> contract.)
   --company <slug>        Company slug (from a result's company_slug).
   --remote <mode>         remote | hybrid | onsite (work_mode facet).
   --facet <key=value>     Any other facet param (repeatable), e.g. --facet salary_min=100000
@@ -104,6 +106,7 @@ DETAIL
 EXAMPLES
   bun run src/cli.ts search -q "backend engineer" --seniority senior --limit 10 --format table
   bun run src/cli.ts search -q "react" --remote remote --region eu --format table
+  bun run src/cli.ts search -q "engineer" -t freelance,part-time --format table
   bun run src/cli.ts search --category devops --country DE --jobage 14 --format table
   bun run src/cli.ts detail golang-zensar-2bxu6dxm --format plain
 
@@ -132,7 +135,7 @@ function parseIntFlag(name: string, raw: string | boolean | string[]): number | 
 // still prints usage.
 const KNOWN_FLAGS: Record<string, Set<string>> = {
   search: new Set([
-    "query", "category", "city", "company", "country", "facet", "format", "jobage", "limit",
+    "query", "category", "city", "company", "country", "employment-type", "facet", "format", "jobage", "limit",
     "page", "region", "remote", "seniority", "skill", "description-format", "no-description", "help", "h",
   ]),
   detail: new Set(["format", "description-format", "help", "h"]),
@@ -204,6 +207,19 @@ async function main(): Promise<number> {
       facets[key] = (facets[key] ?? []).concat(vals)
     }
 
+    // Map the shared employment-type vocabulary onto freehire's facet values,
+    // validating up front so an unsupported type fails with a clear BAD_ARG
+    // rather than the API silently returning zero results.
+    let employmentType: string[]
+    try {
+      employmentType = employmentTypeFacet(stringFlag(flags["employment-type"]))
+    } catch (e) {
+      process.stderr.write(
+        JSON.stringify({ error: e instanceof Error ? e.message : String(e), code: "BAD_ARG" }) + "\n",
+      )
+      return 1
+    }
+
     const opts: SearchOpts = {
       query: stringFlag(flags.query),
       jobage: flags.jobage ? parseInt(flags.jobage as string, 10) : 9999,
@@ -218,6 +234,7 @@ async function main(): Promise<number> {
       seniority: commaList(flags.seniority),
       category: commaList(flags.category),
       skills: commaList(flags.skill),
+      employmentType,
       company: stringFlag(flags.company),
       // --remote <mode> takes the given work_mode; a bare --remote means "remote".
       workMode: stringFlag(flags.remote, "remote"),

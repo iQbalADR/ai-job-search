@@ -13,6 +13,100 @@ per-file diff commands.
 
 ## [Unreleased]
 
+### Added
+
+- **Central `job-search.config.yaml`** - one commented file at the repo root now
+  holds the run settings that were previously scattered across skill/command
+  markdown or hard-coded: search locations, the recency window, employment types,
+  workplace types, how many results to show, which result files to write, which
+  portals to skip, and extra job sources. Every key is optional and falls back to
+  the prior default, so an existing fork keeps working with no config file at all.
+  `/scrape` and `/rank` read it in their load-state steps.
+- **Employment-type filtering (freelance / part-time / contract / …)** - both
+  shipped country-agnostic portal CLIs gain a `--employment-type` / `-t` flag over
+  a shared vocabulary (full-time, part-time, contract, freelance, temporary,
+  internship, comma = OR). `linkedin-search` maps it to LinkedIn's `f_JT` filter;
+  `freehire-search` maps it to its `employment_type` facet. Each validates up front
+  and exits 1 on a value it cannot express, rather than silently returning an
+  unfiltered or empty result set (`freelance` → Contract on both; `temporary` is
+  rejected by freehire, which has no such type). `/scrape` reads
+  `search.employment_types` from the config and passes it to each portal's native
+  flag where it has one, filtering client-side otherwise. Covered by new unit and
+  flag-validation tests in both CLIs.
+- **Config-driven extra job sources** - `sources.extra` in the config lets you add
+  job sources beyond the installed portal CLIs without writing a new skill: RSS/Atom
+  feeds, a generic REST/JSON API (with a field map), `site:` web-search queries, and
+  direct careers-page URLs. `/scrape` Step 1d crawls each, deduplicates and presents
+  them alongside portal results tagged with their source name, and treats every
+  fetched body as untrusted data. This is the lightweight middle ground between the
+  WebSearch fallback and a full `/add-portal` skill.
+- **`tools/export_jobs.py`** - a dependency-free exporter that writes the full job
+  list from `seen_jobs.json` to a self-contained HTML page (sortable, filterable,
+  clickable links, dark-mode aware, with per-job strengths/gaps) and a CSV. `/scrape`
+  and `/rank` run it after presenting so the complete list is always saved to
+  `reports/` (git-ignored) even when the terminal view is capped, and it accepts
+  `--status`, `--sort`, `--top`, and `--formats` for ad-hoc exports.
+
+- **`/job-reset-pref` command** - re-ask your `/scrape` and `/rank` preferences (employment type,
+  location scope, remoteness, recency, result count) and recheck the cache against them. It writes
+  the answers to `job-search.config.yaml` (preferring the git-ignored `job-search.config.local.yaml`
+  so they are not pushed), then re-evaluates the cached jobs non-destructively — tallying by reason
+  (location out of scope, off-type, stale; "type unknown" counted apart, never as a definite drop) —
+  and regenerates the result files, before offering to `/scrape` and `/rank` under the new
+  preferences. It never deletes `seen_jobs.json` entries or rewrites their status without
+  confirmation. `tools/export_jobs.py` gains an `--employment-types` filter (keep only the requested
+  types) that the recheck can use for a hard-filtered view.
+- **Results split by employment type** - when `search.employment_types` is set (e.g. freelance,
+  part-time), `/scrape` and `/rank` now present those roles in their own lists, apart from
+  full-time, instead of one mixed table. `tools/export_jobs.py` gains `--group-by employment-type`
+  (with `--target-types` to order the configured types first): the HTML renders one sortable
+  section per type (Freelance / Part-time / Contract / … / Full-time, then Unspecified last) and
+  the CSV is ordered to match; the filter/sort controls work across all sections. The `Type`
+  column now shows a canonical label ("Part-time") rather than a portal's raw spelling
+  ("part_time"). `/scrape` and `/rank` pass the flags when employment types are configured and
+  separate their terminal tables the same way. Covered by new cases in `tests/test_export_jobs.py`.
+- **Mark scraped/ranked jobs as applied** - from a `/scrape` or `/rank` list you can now say
+  "mark 3 as applied" (or name the job) and it is recorded via the new `tools/mark_applied.py`:
+  an `applied` row is appended to `job_search_tracker.csv` (canonical header created if the file
+  is new) and the job's `seen_jobs.json` status is set to `applied`, so it drops out of future
+  `/scrape` and `/rank` runs and appears in `/html-report`. Jobs are named by URL, seen key, or a
+  unique title/URL substring; resolution is atomic (nothing is written if any identifier is
+  missing or ambiguous). It never duplicates or downgrades an existing tracker row — advancing an
+  already-tracked application stays `/outcome`'s job — and `--seen-only` updates only the scrape
+  state. This is the quick path for an application made outside `/apply`. Covered by
+  `tests/test_mark_applied.py` (17 cases).
+- **Cross-portal near-duplicate collapsing** - the same job posted on several boards, or
+  under a company alias ("Kotak" vs "Kotak Mahindra Bank"), slipped past exact URL /
+  company+title dedup and showed as separate rows. `tools/export_jobs.py` now collapses
+  them: records whose titles match after normalizing (parentheticals/decorations dropped,
+  punctuation folded) **and** whose companies are token-related (one's significant words a
+  subset of the other's, after dropping legal/generic suffixes) become one row, keeping the
+  highest-scored / most-complete entry and noting the other sources. Two genuinely different
+  companies are never merged on a title match. `--no-dedupe` disables it. `/scrape` Step 2
+  applies the same rule at scrape time so results and files agree. Locked in by
+  `tests/test_export_jobs.py` (39 cases covering the filters, normalization, and dedup).
+- **Private, never-pushed settings** - `job-search.config.local.yaml` is git-ignored and
+  read by `/scrape` and `/rank` in preference to the tracked `job-search.config.yaml`, so
+  personal locations, preferences, and sources stay out of git while the tracked file
+  remains a clean template. Custom templates registered via `/add-template` (under
+  `templates/cv/` and `templates/cover_letters/`) and a new `private/` scratch folder are
+  git-ignored too. `templates/README.md` stays tracked. The profile files (`CLAUDE.md`,
+  `01`-`07`, `search-queries.md`, `cv/main_example.tex`) are tracked templates that
+  `.gitignore` cannot protect; the README and SETUP point a personal search at a private
+  repository for those, and a new `tools/private-profile.sh` (`on`/`off`/`status`) sets
+  git's `skip-worktree` bit on them so local edits are never staged or pushed on a clone.
+
+### Changed
+
+- **Result count is configurable** - `output.show` in the config sets how many jobs
+  `/scrape` and `/rank` show in the terminal (`all`, `top10`, `top50`, or any
+  number; `/rank`'s `--top` still overrides). The terminal table is now just a
+  capped view - the exported files hold every job, however long the run.
+- **`search-queries.md` is now scoped to query strategy** - locations, the date
+  window, and employment types moved to `job-search.config.yaml`; the file keeps the
+  role/keyword query categories and points at the config for the run knobs, so there
+  is one obvious place to manage each kind of setting.
+
 ### Security
 
 - **`settings.json` no longer pre-approves `bun run` on arbitrary files** (#396) - the
@@ -25,6 +119,20 @@ per-file diff commands.
   behavior for anything not on the reviewed list. Thanks @vkotaru.
 
 ### Fixed
+
+- **Scraped results no longer surface stale or already-closed postings** - a job can go
+  dead before its posting date ages out of the recency window (a listing removed after a
+  few days), and the export was a raw dump of `seen_jobs.json`, so closed and stale jobs
+  showed up in the files. Closed-at-source detection is generalized beyond LinkedIn: when
+  `/scrape` fetches a posting (any portal, WebSearch, or extra source) it now marks the
+  job `expired` on a dead-page marker ("no longer advertised" on SEEK, "no longer accepting
+  applications", "position filled", HTTP 404/410, or a redirect to a listing page) and
+  leaves it out of the presentation. `/scrape` Step 5 also drops any job whose stored
+  `posted_date` is older than `search.posted_within_days`. `tools/export_jobs.py` now
+  excludes `expired` jobs by default (`--include-expired` to keep them, `--status expired`
+  to list only those) and takes `--max-age-days` to drop stale postings by date; `/scrape`
+  and `/rank` pass the freshness window to it. Undated jobs are kept (absence of a date is
+  not staleness, never guessed).
 
 - **`linkedin-search detail` accepts LinkedIn job URLs with trailing slashes** (#411) -
   passing a job URL with a trailing slash (e.g., `https://www.linkedin.com/jobs/view/<id>/`

@@ -81,6 +81,7 @@ See `../SKILL.md` for the full flag reference and the hosted-dependency note.
 | `--seniority` | | Seniority level(s). |
 | `--category` | | Role category(ies). |
 | `--skill` | | Canonical skill(s). |
+| `--employment-type` | `-t` | Type(s), comma = OR: `full-time`, `part-time`, `contract`, `freelance`, `internship`. (`freelance` → contract.) |
 | `--company` | | Company slug. |
 | `--remote` | | `remote` \| `hybrid` \| `onsite` (`work_mode`). |
 | `--facet` | | Any other facet as `key=value` (repeatable). |

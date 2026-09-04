@@ -29,6 +29,7 @@ export interface SearchOpts {
   seniority: string[]
   category: string[]
   skills: string[]
+  employmentType: string[] // employment_type facet values, e.g. ["contract", "part_time"]
   company?: string
   workMode?: string // work_mode facet: remote | hybrid | onsite
   // Arbitrary facet escape hatch: param -> values, for the long tail of the vocabulary.
@@ -60,6 +61,7 @@ function buildQuery(opts: SearchOpts): URLSearchParams {
     ["seniority", opts.seniority],
     ["category", opts.category],
     ["skills", opts.skills],
+    ["employment_type", opts.employmentType],
     ...Object.entries(opts.facets),
   ]
   for (const [param, values] of facets) {
