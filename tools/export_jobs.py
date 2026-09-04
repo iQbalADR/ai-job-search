@@ -15,6 +15,7 @@ Usage:
     python3 tools/export_jobs.py --status ranked --sort score
     python3 tools/export_jobs.py --max-age-days 14     # drop postings older than 14 days
     python3 tools/export_jobs.py --include-expired     # keep dead postings too
+    python3 tools/export_jobs.py --group-by employment-type --target-types freelance,part-time
     python3 tools/export_jobs.py --top 50              # cap the file to the best 50
     python3 tools/export_jobs.py --formats html        # HTML only
     python3 tools/export_jobs.py --basename job-ranking --title "Job Ranking"
@@ -103,6 +104,16 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--no-dedupe", action="store_true",
         help="Keep near-duplicate postings (same role cross-posted on several boards "
         "or under a company alias). By default they are collapsed into one row.",
+    )
+    p.add_argument(
+        "--group-by", default="none", choices=["none", "employment-type"],
+        help="Split the output into separate lists. 'employment-type' groups jobs into "
+        "Freelance / Part-time / Full-time / … sections (HTML) and orders the CSV by group.",
+    )
+    p.add_argument(
+        "--target-types", default="",
+        help="Comma-separated employment types to list first when grouping "
+        "(e.g. freelance,part-time) — typically your configured employment_types.",
     )
     p.add_argument(
         "--sort", default="score", choices=["score", "fit", "date", "deadline", "company"],
@@ -354,6 +365,10 @@ def cap_top(jobs: list[dict[str, Any]], top: str) -> list[dict[str, Any]]:
 def cell_value(rec: dict[str, Any], key: str) -> str:
     if key == "_source":
         return source_label(rec)
+    if key == "employment_type":
+        # Show the canonical label ("Part-time"), matching the group headings,
+        # rather than a portal's raw spelling ("part_time").
+        return _canon_employment(rec.get(key)) or ""
     val = rec.get(key)
     if val is None or val == "":
         return ""
@@ -383,67 +398,162 @@ def badge_class(rec: dict[str, Any]) -> str:
     return {"high": "b-high", "medium": "b-medium", "low": "b-low"}.get(fit, "")
 
 
-def render_html(jobs: list[dict[str, Any]], title: str, source: Path) -> str:
-    generated = datetime.now().strftime("%Y-%m-%d %H:%M")
-    header_cells = "".join(
+# Employment-type spellings (portal-native and shared-vocabulary) folded to one
+# display label per group, so freelance/part-time roles list apart from full-time.
+EMPLOYMENT_CANON = {
+    "full-time": "Full-time", "full_time": "Full-time", "fulltime": "Full-time",
+    "permanent": "Full-time", "perm": "Full-time",
+    "part-time": "Part-time", "part_time": "Part-time", "parttime": "Part-time",
+    "contract": "Contract", "contractor": "Contract",
+    "freelance": "Freelance", "freelancer": "Freelance",
+    "temporary": "Temporary", "temp": "Temporary",
+    "internship": "Internship", "intern": "Internship",
+}
+UNSPECIFIED_GROUP = "Unspecified"
+# Non-target groups fall back to this order; Unspecified always sorts last.
+DEFAULT_GROUP_ORDER = [
+    "Freelance", "Part-time", "Contract", "Temporary", "Internship", "Full-time",
+    UNSPECIFIED_GROUP,
+]
+
+
+def _canon_employment(value: Any) -> str | None:
+    raw = str(value or "").strip().lower()
+    if not raw:
+        return None
+    return EMPLOYMENT_CANON.get(raw, raw.title())
+
+
+def employment_group(rec: dict[str, Any]) -> str:
+    """The employment-type group label for a job, or 'Unspecified' when unknown."""
+    return _canon_employment(rec.get("employment_type")) or UNSPECIFIED_GROUP
+
+
+def ordered_groups(
+    jobs: list[dict[str, Any]], target_types: list[str] | None
+) -> list[tuple[str, list[dict[str, Any]]]]:
+    """Partition jobs by employment-type group, ordered: the configured target
+    types first (in the order given), then the default order, then any leftover
+    labels alphabetically, with 'Unspecified' always last. Empty groups drop out."""
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for j in jobs:
+        groups.setdefault(employment_group(j), []).append(j)
+
+    order: list[str] = []
+    for t in target_types or []:
+        lab = _canon_employment(t)
+        if lab and lab in groups and lab not in order and lab != UNSPECIFIED_GROUP:
+            order.append(lab)
+    for lab in DEFAULT_GROUP_ORDER:
+        if lab in groups and lab not in order and lab != UNSPECIFIED_GROUP:
+            order.append(lab)
+    for lab in sorted(groups):
+        if lab not in order and lab != UNSPECIFIED_GROUP:
+            order.append(lab)
+    if UNSPECIFIED_GROUP in groups:
+        order.append(UNSPECIFIED_GROUP)
+    return [(lab, groups[lab]) for lab in order]
+
+
+def _header_cells() -> str:
+    cells = "".join(
         f'<th data-key="{html.escape(key)}">{html.escape(header)}</th>'
         for header, key in COLUMNS
         if key != "url"
     )
+    return cells + "<th>Link</th>"
 
-    body_rows = []
-    for i, rec in enumerate(jobs, 1):
-        cells = [f'<td class="num">{i}</td>']
-        for header, key in COLUMNS:
-            if key == "url":
-                continue
-            raw = cell_value(rec, key)
-            if key in ("rank_score", "rank_verdict", "fit"):
-                cls = badge_class(rec)
-                text = html.escape(raw) if raw else "—"
-                cells.append(f'<td><span class="badge {cls}">{text}</span></td>')
-            elif key == "title":
-                url = cell_value(rec, "url")
-                text = html.escape(raw) or "(untitled)"
-                if url:
-                    href = html.escape(url, quote=True)
-                    cells.append(
-                        f'<td class="title"><a href="{href}" target="_blank" rel="noopener">{text}</a></td>'
-                    )
-                else:
-                    cells.append(f'<td class="title">{text}</td>')
+
+def _job_row_html(rec: dict[str, Any], index: int) -> str:
+    cells = [f'<td class="num">{index}</td>']
+    for header, key in COLUMNS:
+        if key == "url":
+            continue
+        raw = cell_value(rec, key)
+        if key in ("rank_score", "rank_verdict", "fit"):
+            cls = badge_class(rec)
+            text = html.escape(raw) if raw else "—"
+            cells.append(f'<td><span class="badge {cls}">{text}</span></td>')
+        elif key == "title":
+            url = cell_value(rec, "url")
+            text = html.escape(raw) or "(untitled)"
+            if url:
+                href = html.escape(url, quote=True)
+                cells.append(
+                    f'<td class="title"><a href="{href}" target="_blank" rel="noopener">{text}</a></td>'
+                )
             else:
-                cells.append(f"<td>{html.escape(raw) or '—'}</td>")
-        # A dedicated Open link column so the URL is always one click away.
-        url = cell_value(rec, "url")
-        if url:
-            href = html.escape(url, quote=True)
-            cells.append(f'<td><a class="open" href="{href}" target="_blank" rel="noopener">open ↗</a></td>')
+                cells.append(f'<td class="title">{text}</td>')
         else:
-            cells.append("<td>—</td>")
+            cells.append(f"<td>{html.escape(raw) or '—'}</td>")
+    url = cell_value(rec, "url")
+    if url:
+        href = html.escape(url, quote=True)
+        cells.append(f'<td><a class="open" href="{href}" target="_blank" rel="noopener">open ↗</a></td>')
+    else:
+        cells.append("<td>—</td>")
 
-        strengths = rec.get("strengths") or []
-        gaps = rec.get("gaps") or []
-        detail = ""
-        if strengths or gaps:
-            parts = []
-            if strengths:
-                items = "".join(f"<li>{html.escape(str(s))}</li>" for s in strengths)
-                parts.append(f'<div class="strengths"><b>Strengths</b><ul>{items}</ul></div>')
-            if gaps:
-                items = "".join(f"<li>{html.escape(str(g))}</li>" for g in gaps)
-                parts.append(f'<div class="gaps"><b>Gaps</b><ul>{items}</ul></div>')
-            colspan = len(COLUMNS) + 1  # +1 for the row-number column
-            detail = (
-                f'<tr class="detail"><td colspan="{colspan}"><div class="detail-wrap">'
-                + "".join(parts)
-                + "</div></td></tr>"
-            )
-        body_rows.append(f'<tr class="job">{"".join(cells)}</tr>{detail}')
+    detail = ""
+    strengths = rec.get("strengths") or []
+    gaps = rec.get("gaps") or []
+    if strengths or gaps:
+        parts = []
+        if strengths:
+            items = "".join(f"<li>{html.escape(str(s))}</li>" for s in strengths)
+            parts.append(f'<div class="strengths"><b>Strengths</b><ul>{items}</ul></div>')
+        if gaps:
+            items = "".join(f"<li>{html.escape(str(g))}</li>" for g in gaps)
+            parts.append(f'<div class="gaps"><b>Gaps</b><ul>{items}</ul></div>')
+        colspan = len(COLUMNS) + 1  # +1 for the row-number column
+        detail = (
+            f'<tr class="detail"><td colspan="{colspan}"><div class="detail-wrap">'
+            + "".join(parts) + "</div></td></tr>"
+        )
+    return f'<tr class="job">{"".join(cells)}</tr>{detail}'
 
-    rows_html = "\n".join(body_rows) or (
+
+def _table_html(jobs: list[dict[str, Any]], start_index: int, table_id: str | None = None) -> tuple[str, int]:
+    """A full <table> for a job list, numbering rows from start_index. Returns
+    (html, next_index) so grouped sections keep a single running numbering."""
+    idx = start_index
+    rows = []
+    for rec in jobs:
+        rows.append(_job_row_html(rec, idx))
+        idx += 1
+    rows_html = "\n".join(rows) or (
         f'<tr><td colspan="{len(COLUMNS) + 1}" class="empty">No jobs to show.</td></tr>'
     )
+    id_attr = f' id="{table_id}"' if table_id else ""
+    table = (
+        f'<table class="jobs"{id_attr}><thead><tr><th>#</th>{_header_cells()}</tr></thead>'
+        f'<tbody>\n{rows_html}\n</tbody></table>'
+    )
+    return table, idx
+
+
+def render_html(
+    jobs: list[dict[str, Any]],
+    title: str,
+    source: Path,
+    group_by: str | None = None,
+    target_types: list[str] | None = None,
+) -> str:
+    generated = datetime.now().strftime("%Y-%m-%d %H:%M")
+
+    if group_by == "employment-type":
+        sections = []
+        idx = 1
+        for label, gjobs in ordered_groups(jobs, target_types):
+            table, idx = _table_html(gjobs, idx)
+            sections.append(
+                f'<section class="group-section">'
+                f'<h2 class="group">{html.escape(label)} <span class="gcount">({len(gjobs)})</span></h2>'
+                f'<div class="table-wrap">{table}</div></section>'
+            )
+        content = "\n".join(sections) or '<p class="empty">No jobs to show.</p>'
+    else:
+        table, _ = _table_html(jobs, 1, table_id="jobs")
+        content = f'<div class="table-wrap">{table}</div>'
 
     try:
         source_rel = source.resolve().relative_to(ROOT)
@@ -455,8 +565,7 @@ def render_html(jobs: list[dict[str, Any]], title: str, source: Path) -> str:
         generated=generated,
         count=len(jobs),
         source=html.escape(str(source_rel)),
-        header_cells=header_cells + "<th>Link</th>",
-        rows=rows_html,
+        content=content,
     )
 
 
@@ -487,6 +596,9 @@ _HTML_TEMPLATE = """<!doctype html>
   th:hover {{ background: #f0f0f0; }}
   td.title {{ white-space: normal; min-width: 260px; }}
   td.num {{ color: #999; }}
+  h2.group {{ font-size: 1.05rem; margin: 1.4rem 0 .45rem; }}
+  h2.group .gcount {{ color: #888; font-weight: 400; font-size: .85rem; }}
+  .group-section {{ margin-bottom: 1rem; }}
   a {{ color: #1a56db; text-decoration: none; }}
   a:hover {{ text-decoration: underline; }}
   a.open {{ font-size: .8rem; }}
@@ -520,23 +632,16 @@ _HTML_TEMPLATE = """<!doctype html>
     <input id="q" type="search" placeholder="Filter by any text (title, company, location, type…)">
     <select id="statusFilter"><option value="">All statuses</option></select>
   </div>
-  <div class="table-wrap">
-    <table id="jobs">
-      <thead><tr><th>#</th>{header_cells}</tr></thead>
-      <tbody>
-{rows}
-      </tbody>
-    </table>
-  </div>
+{content}
 <script>
-  // Client-side filter + column sort. The detail rows (strengths/gaps) move with
-  // their job row so sorting and filtering keep them paired.
-  const table = document.getElementById("jobs");
-  const tbody = table.tBodies[0];
+  // Client-side filter + per-table column sort, across one or more tables (the
+  // page may group jobs by employment type into separate sections). Detail rows
+  // (strengths/gaps) move with their job row so sort/filter keep them paired.
+  const tables = Array.from(document.querySelectorAll("table.jobs"));
   const q = document.getElementById("q");
   const statusSel = document.getElementById("statusFilter");
 
-  function jobRows() {{
+  function rowsOf(tbody) {{
     const out = [];
     let cur = null;
     for (const tr of tbody.rows) {{
@@ -545,15 +650,20 @@ _HTML_TEMPLATE = """<!doctype html>
     }}
     return out;
   }}
+  function statusIndex(t) {{
+    return Array.from(t.tHead.rows[0].cells).findIndex(c => c.textContent.trim() === "Status");
+  }}
 
-  // Populate the status dropdown from the Status column.
+  // Populate the status dropdown from every table's Status column.
   (function initStatuses() {{
-    const idx = [...table.tHead.rows[0].cells].findIndex(c => c.textContent.trim() === "Status");
-    if (idx < 0) return;
     const seen = new Set();
-    for (const {{ job }} of jobRows()) {{
-      const v = job.cells[idx] ? job.cells[idx].textContent.trim() : "";
-      if (v && v !== "—") seen.add(v);
+    for (const t of tables) {{
+      const idx = statusIndex(t);
+      if (idx < 0) continue;
+      for (const {{ job }} of rowsOf(t.tBodies[0])) {{
+        const v = job.cells[idx] ? job.cells[idx].textContent.trim() : "";
+        if (v && v !== "—") seen.add(v);
+      }}
     }}
     [...seen].sort().forEach(v => {{
       const o = document.createElement("option"); o.value = v.toLowerCase(); o.textContent = v;
@@ -564,41 +674,49 @@ _HTML_TEMPLATE = """<!doctype html>
   function applyFilter() {{
     const term = q.value.toLowerCase();
     const status = statusSel.value;
-    const statusIdx = [...table.tHead.rows[0].cells].findIndex(c => c.textContent.trim() === "Status");
-    for (const {{ job, detail }} of jobRows()) {{
-      const text = job.textContent.toLowerCase();
-      const rowStatus = statusIdx >= 0 && job.cells[statusIdx]
-        ? job.cells[statusIdx].textContent.trim().toLowerCase() : "";
-      const show = text.includes(term) && (!status || rowStatus === status);
-      job.style.display = show ? "" : "none";
-      if (detail) detail.style.display = show ? "" : "none";
+    for (const t of tables) {{
+      const idx = statusIndex(t);
+      let visible = 0;
+      for (const {{ job, detail }} of rowsOf(t.tBodies[0])) {{
+        const text = job.textContent.toLowerCase();
+        const rowStatus = idx >= 0 && job.cells[idx] ? job.cells[idx].textContent.trim().toLowerCase() : "";
+        const show = text.includes(term) && (!status || rowStatus === status);
+        job.style.display = show ? "" : "none";
+        if (detail) detail.style.display = show ? "" : "none";
+        if (show) visible++;
+      }}
+      const section = t.closest(".group-section");
+      if (section) section.style.display = visible ? "" : "none";
     }}
   }}
   q.addEventListener("input", applyFilter);
   statusSel.addEventListener("change", applyFilter);
 
-  let sortState = {{ col: -1, asc: true }};
-  table.tHead.rows[0].addEventListener("click", (e) => {{
-    const th = e.target.closest("th");
-    if (!th) return;
-    const col = th.cellIndex;
-    sortState.asc = sortState.col === col ? !sortState.asc : true;
-    sortState.col = col;
-    const pairs = jobRows();
-    pairs.sort((a, b) => {{
-      const av = (a.job.cells[col] ? a.job.cells[col].textContent : "").trim();
-      const bv = (b.job.cells[col] ? b.job.cells[col].textContent : "").trim();
-      const an = parseFloat(av), bn = parseFloat(bv);
-      let cmp;
-      if (!isNaN(an) && !isNaN(bn)) cmp = an - bn;
-      else cmp = av.localeCompare(bv, undefined, {{ numeric: true }});
-      return sortState.asc ? cmp : -cmp;
+  for (const t of tables) {{
+    const state = {{ col: -1, asc: true }};
+    t.tHead.rows[0].addEventListener("click", (e) => {{
+      const th = e.target.closest("th");
+      if (!th) return;
+      const col = th.cellIndex;
+      state.asc = state.col === col ? !state.asc : true;
+      state.col = col;
+      const tbody = t.tBodies[0];
+      const pairs = rowsOf(tbody);
+      pairs.sort((a, b) => {{
+        const av = (a.job.cells[col] ? a.job.cells[col].textContent : "").trim();
+        const bv = (b.job.cells[col] ? b.job.cells[col].textContent : "").trim();
+        const an = parseFloat(av), bn = parseFloat(bv);
+        let cmp;
+        if (!isNaN(an) && !isNaN(bn)) cmp = an - bn;
+        else cmp = av.localeCompare(bv, undefined, {{ numeric: true }});
+        return state.asc ? cmp : -cmp;
+      }});
+      for (const {{ job, detail }} of pairs) {{
+        tbody.appendChild(job);
+        if (detail) tbody.appendChild(detail);
+      }}
     }});
-    for (const {{ job, detail }} of pairs) {{
-      tbody.appendChild(job);
-      if (detail) tbody.appendChild(detail);
-    }}
-  }});
+  }}
 </script>
 </body>
 </html>
@@ -644,6 +762,13 @@ def main(argv: list[str]) -> int:
     jobs.sort(key=key_fn, reverse=reverse)
     jobs = cap_top(jobs, args.top)
 
+    group_by = None if args.group_by == "none" else args.group_by
+    target_types = [t.strip() for t in args.target_types.split(",") if t.strip()]
+    # When grouping, lay the CSV out group-by-group too (same order the HTML
+    # sections use), so both files present freelance/part-time apart from full-time.
+    if group_by == "employment-type":
+        jobs = [rec for _, grp in ordered_groups(jobs, target_types) for rec in grp]
+
     args.out_dir.mkdir(parents=True, exist_ok=True)
     written = []
     if "csv" in formats:
@@ -652,7 +777,10 @@ def main(argv: list[str]) -> int:
         written.append(csv_path)
     if "html" in formats:
         html_path = args.out_dir / f"{args.basename}.html"
-        html_path.write_text(render_html(jobs, args.title, args.input), encoding="utf-8")
+        html_path.write_text(
+            render_html(jobs, args.title, args.input, group_by, target_types),
+            encoding="utf-8",
+        )
         written.append(html_path)
 
     notes = []

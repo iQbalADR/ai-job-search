@@ -108,6 +108,7 @@ python3 tools/export_jobs.py --status ranked --sort score --max-age-days <posted
 ```
 
 - Pass `--max-age-days` set to `search.posted_within_days` (default **14**) so a stale posting never lands in the ranking file. The exporter drops `expired` jobs by default — including the ones this run's scoring agents and the Step 3 sweep just retired — so dead postings stay out of the file automatically.
+- **When `search.employment_types` is set**, also pass `--group-by employment-type --target-types "<the configured types, comma-joined>"` so the ranking file lists freelance/part-time roles in sections apart from full-time (configured types first), ranked within each. Omit both flags otherwise.
 - Respect `output.formats` (default `html,csv`) via `--formats <list>` and `output.directory` (default `reports`) via `--out-dir <dir>`. Default output: `reports/job-ranking.html` and `reports/job-ranking.csv` (the `reports/` folder is git-ignored). Using a distinct basename from `/scrape`'s `job-matches` keeps the two exports from overwriting each other.
 - If `python3` is unavailable, fall back to `python`; if neither is present, note it and skip the export rather than failing the command.
 
@@ -149,6 +150,7 @@ Swept <S> previously ranked entries (<E> newly expired, <C> closing soon).
 
 Rules for the presentation:
 
+- **When `search.employment_types` is set, split the Shortlist by employment type** — a "Freelance" shortlist, a "Part-time" shortlist, and so on (configured types first, then any others, then "Unspecified"), each ranked within itself — so freelance/part-time roles are never mixed with full-time ones. The written ranking file (Step 4.5) uses the same grouping. With no employment types configured, present one combined shortlist as before.
 - The **Shortlist** holds the top jobs up to the `--top`/`output.show` size (Step 0); the rest fall under **Below threshold**. When the shortlist is capped below the number of jobs that scored above the fit threshold, say so and point to the exported files (Step 4.5) for the complete ranking. With `--top all`, every above-threshold job is shortlisted.
 - If Step 4.5 wrote files, add a short line naming them, e.g. "Full ranking: `reports/job-ranking.html` (open in a browser) and `reports/job-ranking.csv`."
 - Every table (shortlist, below threshold, excluded) includes the posting URL as a clickable link - link to the entry's `url` field in `seen_jobs.json` (not the entry's key, which for some portals is a company+title composite rather than the URL), so this never requires an extra lookup. Never drop the link for brevity.

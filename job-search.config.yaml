@@ -93,6 +93,10 @@ output:
   # honoring the search.posted_within_days window above, postings older than it -
   # so a file never shows a stale or already-closed job. (Run /rank to liveness-
   # check every scraped posting; /scrape only verifies the ones it looks at closely.)
+  #
+  # When search.employment_types is set, results are split by employment type -
+  # freelance/part-time roles are listed apart from full-time (configured types
+  # first), in both the terminal and the HTML/CSV files.
 
   # Directory the files are written to (created if missing). This folder is
   # git-ignored, so your job results are never committed.

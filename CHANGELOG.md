@@ -47,6 +47,15 @@ per-file diff commands.
   `reports/` (git-ignored) even when the terminal view is capped, and it accepts
   `--status`, `--sort`, `--top`, and `--formats` for ad-hoc exports.
 
+- **Results split by employment type** - when `search.employment_types` is set (e.g. freelance,
+  part-time), `/scrape` and `/rank` now present those roles in their own lists, apart from
+  full-time, instead of one mixed table. `tools/export_jobs.py` gains `--group-by employment-type`
+  (with `--target-types` to order the configured types first): the HTML renders one sortable
+  section per type (Freelance / Part-time / Contract / … / Full-time, then Unspecified last) and
+  the CSV is ordered to match; the filter/sort controls work across all sections. The `Type`
+  column now shows a canonical label ("Part-time") rather than a portal's raw spelling
+  ("part_time"). `/scrape` and `/rank` pass the flags when employment types are configured and
+  separate their terminal tables the same way. Covered by new cases in `tests/test_export_jobs.py`.
 - **Mark scraped/ranked jobs as applied** - from a `/scrape` or `/rank` list you can now say
   "mark 3 as applied" (or name the job) and it is recorded via the new `tools/mark_applied.py`:
   an `applied` row is appended to `job_search_tracker.csv` (canonical header created if the file

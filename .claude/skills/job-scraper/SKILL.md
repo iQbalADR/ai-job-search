@@ -284,6 +284,14 @@ to `top10`. This caps only the **terminal** table — the written files in Step 
 always contain the full list. When the table is capped, add a line under it noting
 how many more were found and that the full set is in the written files.
 
+**Separate the terminal tables by employment type when `search.employment_types` is
+set.** Present one table per configured type (a "Freelance" table, a "Part-time"
+table, …), each with its own heading, so those roles never sit mixed in with
+full-time ones — the same grouping the written files use. Any job whose type could
+not be determined goes under a final "Unspecified" heading rather than being
+dropped. Apply `output.show` per group. When no employment types are configured,
+present the single combined table as before.
+
 When Step 1b skipped
 portals (`enabled: false`), report them with the `skipped (disabled):` line below
 so opting one out stays visible rather than silent; omit the line when nothing
@@ -361,6 +369,7 @@ python3 tools/export_jobs.py --status new --sort fit --max-age-days <posted_with
 ```
 
 - Pass `--max-age-days` set to `search.posted_within_days` (default **14**) so the files honor the same freshness window as the search and never show a posting older than the window. The exporter also drops jobs marked `expired` by default (Step 2's closed-at-source detection), so dead postings stay out of the files without any extra flag.
+- **When `search.employment_types` is set** (e.g. freelance, part-time), also pass `--group-by employment-type --target-types "<the configured types, comma-joined>"`. The HTML then lists each employment type in its own section — freelance and part-time apart from full-time — with the configured types first, and the CSV is ordered to match. Omit both flags when no employment types are configured (a single combined list is fine then).
 - Respect `output.formats` (default `html,csv`) by passing `--formats <list>`, and `output.directory` (default `reports`) by passing `--out-dir <dir>`. The default output is `reports/job-matches.html` and `reports/job-matches.csv` (the `reports/` folder is git-ignored).
 - `--status new` writes just this run's new matches; if the user asked to see everything, use `--status all` instead.
 - If `python3` is unavailable, fall back to `python`; if neither is present, note it and skip the export rather than failing the run.
