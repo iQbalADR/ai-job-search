@@ -47,6 +47,15 @@ per-file diff commands.
   `reports/` (git-ignored) even when the terminal view is capped, and it accepts
   `--status`, `--sort`, `--top`, and `--formats` for ad-hoc exports.
 
+- **`/job-reset-pref` command** - re-ask your `/scrape` and `/rank` preferences (employment type,
+  location scope, remoteness, recency, result count) and recheck the cache against them. It writes
+  the answers to `job-search.config.yaml` (preferring the git-ignored `job-search.config.local.yaml`
+  so they are not pushed), then re-evaluates the cached jobs non-destructively — tallying by reason
+  (location out of scope, off-type, stale; "type unknown" counted apart, never as a definite drop) —
+  and regenerates the result files, before offering to `/scrape` and `/rank` under the new
+  preferences. It never deletes `seen_jobs.json` entries or rewrites their status without
+  confirmation. `tools/export_jobs.py` gains an `--employment-types` filter (keep only the requested
+  types) that the recheck can use for a hard-filtered view.
 - **Results split by employment type** - when `search.employment_types` is set (e.g. freelance,
   part-time), `/scrape` and `/rank` now present those roles in their own lists, apart from
   full-time, instead of one mixed table. `tools/export_jobs.py` gains `--group-by employment-type`

@@ -106,6 +106,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "or under a company alias). By default they are collapsed into one row.",
     )
     p.add_argument(
+        "--employment-types", default="",
+        help="Keep only these employment types (comma-separated, e.g. freelance,part-time). "
+        "Jobs with an unknown type are dropped. Omit to keep all types.",
+    )
+    p.add_argument(
         "--group-by", default="none", choices=["none", "employment-type"],
         help="Split the output into separate lists. 'employment-type' groups jobs into "
         "Freelance / Part-time / Full-time / … sections (HTML) and orders the CSV by group.",
@@ -338,6 +343,17 @@ def freshness_date(rec: dict[str, Any]) -> date | None:
         except ValueError:
             continue
     return None
+
+
+def filter_by_employment(jobs: list[dict[str, Any]], types: list[str]) -> list[dict[str, Any]]:
+    """Keep only jobs whose canonical employment type is in `types`. A job whose type
+    is unknown ('Unspecified') is dropped - a filter names what you want, and an
+    unconfirmed type is not a confirmed match (re-scrape with the type filter to
+    populate it). Returns all jobs when `types` is empty."""
+    wanted = {c for c in (_canon_employment(t) for t in types) if c}
+    if not wanted:
+        return jobs
+    return [j for j in jobs if employment_group(j) in wanted]
 
 
 def filter_by_age(jobs: list[dict[str, Any]], max_age_days: int) -> list[dict[str, Any]]:
@@ -753,6 +769,14 @@ def main(argv: list[str]) -> int:
         jobs = filter_by_age(jobs, args.max_age_days)
         dropped_stale = before - len(jobs)
 
+    # Keep only the requested employment types (recheck of a mixed cache).
+    dropped_type = 0
+    emp_types = [t.strip() for t in args.employment_types.split(",") if t.strip()]
+    if emp_types:
+        before = len(jobs)
+        jobs = filter_by_employment(jobs, emp_types)
+        dropped_type = before - len(jobs)
+
     # Collapse near-duplicate postings (same role on several boards / company alias).
     merged_dupes = 0
     if not args.no_dedupe:
@@ -788,6 +812,8 @@ def main(argv: list[str]) -> int:
         notes.append(f"dropped {dropped_expired} expired")
     if dropped_stale:
         notes.append(f"dropped {dropped_stale} older than {args.max_age_days}d")
+    if dropped_type:
+        notes.append(f"dropped {dropped_type} off-type")
     if merged_dupes:
         notes.append(f"merged {merged_dupes} duplicate(s)")
     suffix = f" (from {total}; {'; '.join(notes)})" if notes else ""

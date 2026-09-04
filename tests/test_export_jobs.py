@@ -22,6 +22,7 @@ from tools.export_jobs import (
     drop_expired,
     employment_group,
     filter_by_age,
+    filter_by_employment,
     filter_jobs,
     freshness_date,
     cap_top,
@@ -235,6 +236,26 @@ class EmploymentGroupTests(unittest.TestCase):
     def test_type_cell_shows_canonical_label(self):
         self.assertEqual(cell_value(job(employment_type="part_time"), "employment_type"), "Part-time")
         self.assertEqual(cell_value(job(), "employment_type"), "")
+
+
+class EmploymentFilterTests(unittest.TestCase):
+    def test_keeps_only_requested_types(self):
+        jobs = [
+            job(title="fl", employment_type="freelance"),
+            job(title="pt", employment_type="part_time"),
+            job(title="ft", employment_type="full_time"),
+        ]
+        kept = {j["title"] for j in filter_by_employment(jobs, ["freelance", "part-time"])}
+        self.assertEqual(kept, {"fl", "pt"})
+
+    def test_drops_unspecified_when_filtering(self):
+        jobs = [job(title="fl", employment_type="freelance"), job(title="unk")]
+        kept = {j["title"] for j in filter_by_employment(jobs, ["freelance"])}
+        self.assertEqual(kept, {"fl"})
+
+    def test_empty_filter_keeps_all(self):
+        jobs = [job(employment_type="freelance"), job()]
+        self.assertEqual(len(filter_by_employment(jobs, [])), 2)
 
 
 class OrderedGroupsTests(unittest.TestCase):
