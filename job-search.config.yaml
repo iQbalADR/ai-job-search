@@ -68,13 +68,14 @@ search:
 # output - how results are presented and saved.
 # ----------------------------------------------------------------------------
 output:
-  # How many jobs to show in the terminal table after /scrape and /rank.
+  # How many jobs to show in the TERMINAL table after /scrape and /rank.
   #   all        - show every match
   #   top10      - the 10 best
   #   top50      - the 50 best
   #   <a number> - e.g. 25
-  # This only controls the terminal view. The written files below always contain
-  # the FULL list, however many jobs there are.
+  # This caps the terminal view ONLY. The written HTML/CSV files are never capped
+  # by this - they always contain the FULL list, however many jobs there are, so
+  # the website is complete even when the terminal shows just the top few.
   show: top10
 
   # Always write the full result list to files (in addition to the terminal

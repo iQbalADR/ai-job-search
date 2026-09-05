@@ -413,6 +413,24 @@ class MainEndToEndTests(unittest.TestCase):
             rows = list(csv.DictReader((out_dir / "job-matches.csv").read_text().splitlines()))
             self.assertEqual([r["Type"] for r in rows], ["Freelance", "Part-time", "Full-time"])
 
+    def test_default_export_is_uncapped(self):
+        # The files must hold every job (no terminal-style top-N cap) unless --top
+        # is explicitly given. 30 distinct jobs -> 30 rows in the file.
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp)
+            seen = {
+                f"k{i}": job(title=f"Role {i}", company=f"Co {i}", url=f"https://x/{i}",
+                            posted_date=iso(1))
+                for i in range(30)
+            }
+            inp = self._write_seen(d, seen)
+            out_dir = d / "reports"
+            with redirect_stdout(io.StringIO()):
+                rc = main(["--input", str(inp), "--out-dir", str(out_dir), "--formats", "csv"])
+            self.assertEqual(rc, 0)
+            rows = list(csv.DictReader((out_dir / "job-matches.csv").read_text().splitlines()))
+            self.assertEqual(len(rows), 30)
+
     def test_missing_input_exits(self):
         with self.assertRaises(SystemExit):
             main(["--input", "/nonexistent/seen.json"])

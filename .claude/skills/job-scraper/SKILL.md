@@ -365,9 +365,10 @@ Run the exporter, which is dependency-free and writes a self-contained HTML page
 (sortable, filterable, clickable links) and a CSV:
 
 ```bash
-python3 tools/export_jobs.py --status new --sort fit --max-age-days <posted_within_days> --basename job-matches --title "Job Matches - <YYYY-MM-DD>"
+python3 tools/export_jobs.py --status new --sort fit --top all --max-age-days <posted_within_days> --basename job-matches --title "Job Matches - <YYYY-MM-DD>"
 ```
 
+- **Always pass `--top all` — the files are never capped.** `output.show` limits only the terminal table (Step 5); the written HTML/CSV must contain **every** matching job, however many. Never pass `output.show` (top10/top25/…) to the exporter.
 - Pass `--max-age-days` set to `search.posted_within_days` (default **14**) so the files honor the same freshness window as the search and never show a posting older than the window. The exporter also drops jobs marked `expired` by default (Step 2's closed-at-source detection), so dead postings stay out of the files without any extra flag.
 - **When `search.employment_types` is set** (e.g. freelance, part-time), also pass `--group-by employment-type --target-types "<the configured types, comma-joined>"`. The HTML then lists each employment type in its own section — freelance and part-time apart from full-time — with the configured types first, and the CSV is ordered to match. Omit both flags when no employment types are configured (a single combined list is fine then).
 - Respect `output.formats` (default `html,csv`) by passing `--formats <list>`, and `output.directory` (default `reports`) by passing `--out-dir <dir>`. The default output is `reports/job-matches.html` and `reports/job-matches.csv` (the `reports/` folder is git-ignored).

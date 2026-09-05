@@ -120,6 +120,12 @@ per-file diff commands.
 
 ### Fixed
 
+- **The exported HTML/CSV files are never capped by the terminal top-N setting** - `output.show`
+  (top10 / top50 / …) is a terminal-view limit only, but it could read as if it also trimmed the
+  written files. `/scrape` and `/rank` now pass `--top all` to `tools/export_jobs.py` explicitly and
+  the docs/config state plainly that the files always hold every matching job, so the website copy is
+  complete even when the terminal shows just the top few. Pinned by a new `test_export_jobs.py` case
+  (30 jobs in → 30 rows out with no `--top`).
 - **Scraped results no longer surface stale or already-closed postings** - a job can go
   dead before its posting date ages out of the recency window (a listing removed after a
   few days), and the export was a raw dump of `seen_jobs.json`, so closed and stale jobs

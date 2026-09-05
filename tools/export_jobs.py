@@ -126,7 +126,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     )
     p.add_argument(
         "--top", default="all",
-        help="Cap the output to the best N jobs, or 'all' (default: all).",
+        help="Cap the file to the best N jobs, or 'all' (default: all — the written "
+        "files are meant to be the complete list; the terminal top-N view is separate).",
     )
     p.add_argument(
         "--formats", default="html,csv",
