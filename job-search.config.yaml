@@ -172,3 +172,74 @@ sources:
   #   - type: url
   #     name: Acme Careers
   #     url: https://acme.example.com/careers
+
+  # ==========================================================================
+  # Freelance / project-based sources (part-time, contract, gig work).
+  #
+  # Copy the ones you want into `extra:` above. Tagging a freelance source with
+  # `employment_types` lets the search.employment_types filter include/exclude it,
+  # and groups its jobs into the freelance/part-time sections of the output.
+  #
+  # SCAM WARNING: freelance marketplaces carry many scam postings. /scrape scores
+  # each freelance/project posting's legitimacy (see the "Legit" column in the
+  # exported files) and flags likely scams; you can also check any posting with
+  # `python3 tools/scam_score.py --file posting.txt`. Treat a low score as a
+  # caution to look closely, not proof - and never send money or move to a
+  # personal messenger to "start" a gig.
+  #
+  # ToS NOTE: Upwork, Freelancer, Toptal, and Contra are auth-walled with terms
+  # that restrict automated access, so they are reached here only through public
+  # WebSearch (a `site:` query), for personal use, at low volume - not scraped.
+  # The RSS/API boards below are public and meant to be read programmatically.
+  # ==========================================================================
+  #
+  #   # Upwork - public search only (personal use; keep volume low).
+  #   - type: websearch
+  #     name: Upwork
+  #     query: 'site:upwork.com/freelance-jobs {keywords} {location}'
+  #     employment_types: [freelance, contract]
+  #
+  #   # Freelancer.com - public search only.
+  #   - type: websearch
+  #     name: Freelancer
+  #     query: 'site:freelancer.com/projects {keywords}'
+  #     employment_types: [freelance, contract]
+  #
+  #   # Contra / Toptal - public search only.
+  #   - type: websearch
+  #     name: Contra
+  #     query: 'site:contra.com {keywords} {location}'
+  #     employment_types: [freelance, part-time]
+  #
+  #   # RemoteOK - public JSON API (remote roles, many contract/freelance).
+  #   # The response is a JSON array whose FIRST element is a legal notice with no
+  #   # `position` - it has an empty title and is skipped automatically.
+  #   - type: api
+  #     name: RemoteOK
+  #     url: https://remoteok.com/api
+  #     map:
+  #       title: position
+  #       company: company
+  #       url: url
+  #       location: location
+  #       date: date
+  #     employment_types: [freelance, contract]
+  #
+  #   # Remotive - public JSON API. Filter with ?search=<keywords>.
+  #   - type: api
+  #     name: Remotive
+  #     url: https://remotive.com/api/remote-jobs?search=python
+  #     results_path: jobs
+  #     map:
+  #       title: title
+  #       company: company_name
+  #       url: url
+  #       location: candidate_required_location
+  #       date: publication_date
+  #     employment_types: [freelance, contract, part-time]
+  #
+  #   # WeWorkRemotely - contract feed (RSS).
+  #   - type: rss
+  #     name: WeWorkRemotely (Contract)
+  #     url: https://weworkremotely.com/categories/contract.rss
+  #     employment_types: [contract, freelance]

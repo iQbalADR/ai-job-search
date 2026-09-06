@@ -47,6 +47,19 @@ per-file diff commands.
   `reports/` (git-ignored) even when the terminal view is capped, and it accepts
   `--status`, `--sort`, `--top`, and `--formats` for ad-hoc exports.
 
+- **Freelance / project-based sources + a legitimacy ("not a scam") score** - `job-search.config.yaml`
+  ships ready-to-uncomment freelance/gig sources: Upwork, Freelancer, and Contra via public `site:`
+  WebSearch (personal-use, ToS-respecting — not scraped), and RemoteOK, Remotive, and WeWorkRemotely
+  via their public API/RSS. Because freelance marketplaces carry many scams, `/scrape` Step 3.5 now
+  assesses each freelance/project posting for well-known red flags (off-platform contact, upfront
+  fees, overpayment/fake-check patterns, odd payment methods, requests for bank/ID details,
+  unrealistic pay, high-pressure/vague copy) and records `legit_band` (Likely legit / Caution /
+  High risk), `legit_score` (0-100), and `scam_flags`. The exported HTML/CSV gains a colored **Legit**
+  column and lists the flags; the terminal shows the band next to a risky title. It is a caution
+  signal for the user, never an accusation against a company, and never auto-drops a posting. New
+  `tools/scam_score.py` scores a posting's text deterministically (`--text`/`--file`/stdin) as a
+  cross-check, covered by `tests/test_scam_score.py` (15 cases); the export column is covered by
+  `tests/test_export_jobs.py`.
 - **`/job-reset-pref` command** - re-ask your `/scrape` and `/rank` preferences (employment type,
   location scope, remoteness, recency, result count) and recheck the cache against them. It writes
   the answers to `job-search.config.yaml` (preferring the git-ignored `job-search.config.local.yaml`

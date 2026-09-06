@@ -270,6 +270,8 @@ Bash(python tools/export_jobs.py:*)
 Bash(python3 tools/export_jobs.py:*)
 Bash(python tools/mark_applied.py:*)
 Bash(python3 tools/mark_applied.py:*)
+Bash(python tools/scam_score.py:*)
+Bash(python3 tools/scam_score.py:*)
 ```
 
 **Keep personal settings out of git.** `job-search.config.yaml` is tracked, so anything you put in it can be pushed. For personal locations, preferences, or sources, copy it to `job-search.config.local.yaml` and edit that — it is git-ignored and read in preference to the tracked file. Custom templates registered via `/add-template` (under `templates/cv/` and `templates/cover_letters/`) and a `private/` folder are git-ignored too. Note that your **profile** (`CLAUDE.md`, the `01`–`07` skill files, `search-queries.md`, `cv/main_example.tex`) is written into *tracked* files, which `.gitignore` cannot protect. For a personal search, use a **private repository** (section 8) rather than a public fork, or run `tools/private-profile.sh on` to set git's `skip-worktree` bit on those files so your local edits are never staged or pushed on this clone (run `off` before pulling upstream, `on` after; `status` lists what's protected — it is per-clone local state, so re-run it after a fresh clone).

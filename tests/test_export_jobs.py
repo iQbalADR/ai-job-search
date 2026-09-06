@@ -312,6 +312,32 @@ class GroupedHtmlTests(unittest.TestCase):
         self.assertNotIn('class="group-section"', out)
 
 
+class LegitColumnTests(unittest.TestCase):
+    def test_legit_band_renders_as_a_coloured_badge(self):
+        out = render_html([job(url="https://x/1", legit_band="High risk")], "M", Path("x.json"))
+        self.assertIn("High risk", out)
+        self.assertIn('class="badge b-low"', out)  # high risk -> red badge
+
+    def test_likely_legit_is_green(self):
+        out = render_html([job(url="https://x/1", legit_band="Likely legit")], "M", Path("x.json"))
+        self.assertIn('class="badge b-high"', out)
+
+    def test_scam_flags_show_in_detail(self):
+        out = render_html(
+            [job(url="https://x/1", legit_band="Caution",
+                 scam_flags=["asks to move off-platform to a personal messenger"])],
+            "M", Path("x.json"))
+        self.assertIn("Legitimacy flags", out)
+        self.assertIn("off-platform", out)
+
+    def test_legit_in_csv_column(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "o.csv"
+            write_csv([job(url="https://x/1", legit_band="Caution")], path)
+            rows = list(csv.DictReader(path.read_text().splitlines()))
+        self.assertEqual(rows[0]["Legit"], "Caution")
+
+
 class SourceLabelTests(unittest.TestCase):
     def test_portal_with_non_cli_source(self):
         self.assertEqual(source_label(job(source_name="WWR", source="rss")), "WWR (rss)")

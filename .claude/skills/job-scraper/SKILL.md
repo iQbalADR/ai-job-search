@@ -5,7 +5,7 @@ description: >
   (LinkedIn, local job boards, and any skills added with /add-portal). Deduplicates
   across runs. Triggers on: job scrape, find jobs, search jobs, new jobs, job search,
   scrape jobs, /scrape
-allowed-tools: Read, Write, Edit, Glob, Grep, Bash(bun --version), Bash(bun run .agents/skills/*/cli/src/cli.ts *), Bash(python3 tools/export_jobs.py *), Bash(python tools/export_jobs.py *), Bash(python3 tools/mark_applied.py *), Bash(python tools/mark_applied.py *), WebFetch, WebSearch, Agent, AskUserQuestion
+allowed-tools: Read, Write, Edit, Glob, Grep, Bash(bun --version), Bash(bun run .agents/skills/*/cli/src/cli.ts *), Bash(python3 tools/export_jobs.py *), Bash(python tools/export_jobs.py *), Bash(python3 tools/mark_applied.py *), Bash(python tools/mark_applied.py *), Bash(python3 tools/scam_score.py *), Bash(python tools/scam_score.py *), WebFetch, WebSearch, Agent, AskUserQuestion
 ---
 
 # Job Scraper
@@ -188,6 +188,37 @@ For each new job, do a rapid fit check (NOT the full evaluation from `04-job-eva
 
 **Language override:** before assigning a match level, check the posting against `04-job-evaluation.md`'s Language Gate (a required language you haven't declared at all in your CLAUDE.md Languages table). A required language that's entirely undeclared overrides skill fit: mark it **Low** regardless of how well the skills align, and name it in the highlight bullets so it isn't buried under an otherwise-good-looking match. A **declared** language at a requirement that reads higher than your declared level is *not* an override — score fit normally, but add a red-flag bullet under that job's highlights (Step 5) quoting the posting's requirement next to your declared level, so the gap is visible without being auto-downgraded.
 
+### Step 3.5: Legitimacy Check (freelance / project postings)
+
+Freelance and project marketplaces (Upwork, Freelancer, and the `sources.extra`
+freelance boards) carry many scam postings, so assess legitimacy for any posting
+that is freelance/project-based — from a freelance source, or with an
+`employment_type` of freelance / contract / part-time. Skip it for ordinary
+full-time corporate roles (leave the fields unset).
+
+Assess from the **fetched posting text** using these red-flag categories (the same
+ones `tools/scam_score.py` scans, so the tool and this judgment agree):
+
+- **Off-platform contact** — asks to move to WhatsApp/Telegram/Signal/personal email to "start".
+- **Upfront payment/fees** — registration, training, "starter kit", or deposit required to begin.
+- **Overpayment / fake-check / reshipping** — "we'll send a check, deposit it and wire back", package forwarding.
+- **Odd payment methods** — gift cards, wire-only, Western Union, crypto/USDT.
+- **Personal/financial info early** — bank details, SSN, ID copies requested before any real hiring.
+- **Unrealistic pay** — outsized pay for trivial/no-experience work, "guaranteed income", "easy money".
+- **Pressure / vague scope** — "start immediately", "limited slots", generic filler with big pay.
+
+Score it: `legit_band` = **Likely legit** (no real flags), **Caution** (one or two
+softer flags), or **High risk** (a payment/fee/contact-off-platform flag, or several
+flags). Record 0-3 short `scam_flags` reasons. You may cross-check with
+`python3 tools/scam_score.py --file <saved posting>` (or pipe the text) for a
+deterministic baseline; the tool is a heuristic — your reading of the full context
+is what decides the band. Store `legit_band`/`legit_score`/`scam_flags` in Step 4.
+
+**This is a caution signal for the user, not a verdict on the employer** (the same
+"flag, never accuse" rule as Step 2.5). Never brand a company a scammer and never
+auto-drop a posting on the score alone — surface it and let the user decide. A
+**High risk** band is surfaced prominently in Step 5; it does not veto the row.
+
 ### Step 4: Deduplicate & Store
 
 1. Add ALL fetched jobs (new and skipped) to `seen_jobs.json` with structure:
@@ -206,7 +237,10 @@ For each new job, do a rapid fit check (NOT the full evaluation from `04-job-eva
       "portal": "<source portal skill, e.g. jobindex-search>",
       "source": "cli/websearch/rss/api/url",
       "source_name": "<extra-source name from config, when source is rss/api/url>",
-      "employment_type": "<full-time/part-time/contract/freelance/temporary/internship, when known>"
+      "employment_type": "<full-time/part-time/contract/freelance/temporary/internship, when known>",
+      "legit_band": "<Likely legit/Caution/High risk, for freelance/project postings>",
+      "legit_score": "<0-100, higher = more legitimate>",
+      "scam_flags": ["<0-3 short red-flag reasons, when any>"]
     }
   }
 }
@@ -219,6 +253,8 @@ The `source` field records which mechanism produced the entry: `cli` for Step 1b
 The `source_name` field names the `sources.extra` entry (from `job-search.config.yaml`) that produced a Step 1d job, so `rss`/`api`/`url` results can be attributed to a specific feed or page rather than just their type. Omit it for portal-CLI and WebSearch entries. `employment_type` records the posting's employment type when it is known — from a portal's structured output, a source's `employment_types` tag, or the Step 2 detail fetch — using the shared vocabulary (full-time, part-time, contract, freelance, temporary, internship). A missing key means it was not determined; **never infer it** from the title alone, and never backfill by guessing. Both fields are additive: entries predating them simply lack them, and readers tolerate the absence.
 
 `/rank` extends this schema additively: ranked entries also carry `rank_score` (0–100 overall score), `rank_verdict` (fit band, e.g. "strong fit"), `rank_date` (ISO date of ranking), the veto fields `location_verdict` and `language_gate` (both PASS/FAIL/FLAG) with `language_note` (the quoted requirement explaining a non-PASS), and `strengths`/`gaps` (1-3 verbatim bullets each, copied from the scoring agent's findings). The `status` field is set to `"ranked"`. Do not drop any of these fields when re-writing entries. Entries ranked before `strengths`/`gaps` existed simply lack them; readers tolerate their absence and never backfill by guessing. Entries ranked before the verdict rename may carry a legacy PASS/FAIL/FLAG string in `location` - read that as the verdict when `location_verdict` is absent; in fresh entries `location` is always a place, never a verdict.
+
+`legit_band`, `legit_score`, and `scam_flags` record the Step 3.5 legitimacy assessment for freelance/project postings (from a freelance source or an `employment_type` of freelance/contract/part-time). `legit_band` is `Likely legit` / `Caution` / `High risk`; `legit_score` is 0-100 (higher = more legitimate); `scam_flags` holds 0-3 short red-flag reasons. They are omitted for postings not assessed (most full-time corporate roles). These are **caution signals for the user, not accusations** — never brand a company as a scammer, and never auto-exclude a posting on the score alone.
 
 `applied` is set by the mark-applied path (Step 5's offer, via `tools/mark_applied.py`): it records that the user applied to a posting, so the entry is treated as already-handled and never re-presented. It is a mirror of the authoritative record — the tracker row the same tool writes — kept on the entry so the scrape state and the exported files agree. The tool also stores `applied_date` (ISO date). `/rank` skips `applied` entries the same way it skips `ranked` ones.
 
@@ -323,6 +359,8 @@ health: <portal-name> - broken (0 results for the SKILL.md test query and a broa
 | 1 | High | ... | ... | ... | ... | [Link](...) |
 
 If Step 2.5 flagged a mass-posting pattern, note it in the Title cell (e.g. "Frontend Developer (posted in 6 cities)") rather than burying it. Do the same for a declared-language-insufficient-level flag from the Language Gate (e.g. "Backend Engineer ⚠ fluent English required") - both are signals the user should see at a glance, not just in the detail highlights below.
+
+For freelance/project postings assessed in Step 3.5, show the legitimacy band next to the Title when it is not "Likely legit" — e.g. "Logo design gig ⚠ High risk (upfront fee)" — so a likely scam is visible at a glance. In the written files this is the "Legit" column. Never present the band as a verdict on the company; it is a caution for the user.
 
 ### High-Match Highlights
 For each high-match job, add 2-3 bullet points:

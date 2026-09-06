@@ -55,6 +55,7 @@ COLUMNS: list[tuple[str, str]] = [
     ("Company", "company"),
     ("Location", "location"),
     ("Type", "employment_type"),
+    ("Legit", "legit_band"),
     ("Posted", "posted_date"),
     ("Deadline", "deadline"),
     ("Source", "_source"),
@@ -415,6 +416,18 @@ def badge_class(rec: dict[str, Any]) -> str:
     return {"high": "b-high", "medium": "b-medium", "low": "b-low"}.get(fit, "")
 
 
+def legit_badge_class(band: str) -> str:
+    """Colour for the legitimacy band: legit green, caution amber, high-risk red."""
+    b = str(band or "").lower()
+    if "legit" in b:
+        return "b-high"
+    if "caution" in b:
+        return "b-medium"
+    if "risk" in b:
+        return "b-low"
+    return ""
+
+
 # Employment-type spellings (portal-native and shared-vocabulary) folded to one
 # display label per group, so freelance/part-time roles list apart from full-time.
 EMPLOYMENT_CANON = {
@@ -487,7 +500,12 @@ def _job_row_html(rec: dict[str, Any], index: int) -> str:
         if key == "url":
             continue
         raw = cell_value(rec, key)
-        if key in ("rank_score", "rank_verdict", "fit"):
+        if key == "legit_band":
+            if raw:
+                cells.append(f'<td><span class="badge {legit_badge_class(raw)}">{html.escape(raw)}</span></td>')
+            else:
+                cells.append("<td>—</td>")
+        elif key in ("rank_score", "rank_verdict", "fit"):
             cls = badge_class(rec)
             text = html.escape(raw) if raw else "—"
             cells.append(f'<td><span class="badge {cls}">{text}</span></td>')
@@ -513,7 +531,8 @@ def _job_row_html(rec: dict[str, Any], index: int) -> str:
     detail = ""
     strengths = rec.get("strengths") or []
     gaps = rec.get("gaps") or []
-    if strengths or gaps:
+    scam_flags = rec.get("scam_flags") or []
+    if strengths or gaps or scam_flags:
         parts = []
         if strengths:
             items = "".join(f"<li>{html.escape(str(s))}</li>" for s in strengths)
@@ -521,6 +540,9 @@ def _job_row_html(rec: dict[str, Any], index: int) -> str:
         if gaps:
             items = "".join(f"<li>{html.escape(str(g))}</li>" for g in gaps)
             parts.append(f'<div class="gaps"><b>Gaps</b><ul>{items}</ul></div>')
+        if scam_flags:
+            items = "".join(f"<li>{html.escape(str(f))}</li>" for f in scam_flags)
+            parts.append(f'<div class="scamflags"><b>Legitimacy flags</b><ul>{items}</ul></div>')
         colspan = len(COLUMNS) + 1  # +1 for the row-number column
         detail = (
             f'<tr class="detail"><td colspan="{colspan}"><div class="detail-wrap">'
@@ -630,6 +652,7 @@ _HTML_TEMPLATE = """<!doctype html>
   .detail-wrap ul {{ margin: .2rem 0 .4rem 1rem; padding: 0; }}
   .strengths b {{ color: #1e7a46; }}
   .gaps b {{ color: #a23b36; }}
+  .scamflags b {{ color: #a23b36; }}
   .empty {{ text-align: center; color: #888; padding: 2rem; }}
   @media (prefers-color-scheme: dark) {{
     body {{ background: #18191a; color: #e4e6eb; }}
