@@ -1,6 +1,15 @@
 # Search Queries for Job Scraper
 
-<!-- SETUP: Customize these queries based on your skills, target roles, and location -->
+<!-- SETUP: Customize these queries based on your skills and target roles. -->
+
+> **Where settings live.** This file holds your **query strategy** — the roles,
+> titles, and keywords `/scrape` searches for, grouped by priority. The **run
+> settings** — locations, how recent, which employment types (freelance,
+> part-time, …), which portals to skip, extra job sources, and how results are
+> shown and saved — live in one place: **`job-search.config.yaml`** at the repo
+> root. Edit that file for the knobs; edit this file for *what to search*.
+> The two work together: `/scrape` combines each query below with the locations
+> and filters from the config.
 
 ## Installed portal CLIs (primary for `/scrape`)
 
@@ -69,12 +78,20 @@ site:[YOUR_JOB_BOARD] "technical consultant" [YOUR_DOMAIN] [YOUR_CITY]
 
 ## Location Filter
 
-When evaluating results, verify the job location is within reasonable commute distance from your home. Define acceptable areas:
-- [YOUR_CITY] and surrounding areas
-- [ACCEPTABLE_AREA_1]
-- [ACCEPTABLE_AREA_2]
+The locations `/scrape` searches are set by `search.locations` in
+`job-search.config.yaml`. When evaluating results, verify each job's location is
+within reasonable commute distance (or acceptably remote). Note any areas that
+need judgement below - the borderline and too-far cases the config's plain list
+can't capture:
 - [BORDERLINE_AREA] (borderline - ~X min by transit)
 - [TOO_FAR_AREA] (too far)
+
+## Employment-Type Filter
+
+Which employment types to include (freelance, part-time, contract, full-time,
+temporary, internship) is set by `search.employment_types` in
+`job-search.config.yaml`. `/scrape` passes them to each portal's native filter
+where it has one and filters client-side otherwise - you don't repeat them here.
 
 ## Language Filter
 
@@ -82,7 +99,10 @@ Your working languages and levels are in CLAUDE.md's Languages table. When filte
 
 ## Date Filter
 
-Only include jobs posted within the last 14 days, or with an application deadline that has not yet passed. If a posting date cannot be determined, include it but flag as "date unknown".
+Only include jobs posted within the last `search.posted_within_days` days (set in
+`job-search.config.yaml`, default 14), or with an application deadline that has not
+yet passed. If a posting date cannot be determined, include it but flag as "date
+unknown".
 
 ## Adapting Queries
 

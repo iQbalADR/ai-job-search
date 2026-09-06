@@ -1,5 +1,5 @@
 import { describe, test, expect } from "bun:test";
-import { cleanHtml, normalizeSlug, toResult, toDetail, type FreehireJob } from "../src/helpers";
+import { cleanHtml, normalizeSlug, toResult, toDetail, employmentTypeFacet, type FreehireJob } from "../src/helpers";
 
 function job(overrides: Partial<FreehireJob> = {}): FreehireJob {
   return {
@@ -85,6 +85,41 @@ describe("cleanHtml", () => {
   test("returns null for empty input", () => {
     expect(cleanHtml("")).toBeNull();
     expect(cleanHtml(null)).toBeNull();
+  });
+});
+
+describe("employmentTypeFacet", () => {
+  test("maps the shared vocabulary onto freehire facet values", () => {
+    expect(employmentTypeFacet("full-time")).toEqual(["full_time"]);
+    expect(employmentTypeFacet("part-time")).toEqual(["part_time"]);
+    expect(employmentTypeFacet("contract")).toEqual(["contract"]);
+    expect(employmentTypeFacet("internship")).toEqual(["internship"]);
+  });
+
+  test("maps freelance to contract (freehire has no freelance type)", () => {
+    expect(employmentTypeFacet("freelance")).toEqual(["contract"]);
+  });
+
+  test("de-duplicates and preserves first-seen order", () => {
+    expect(employmentTypeFacet("freelance,contract,part-time")).toEqual(["contract", "part_time"]);
+  });
+
+  test("accepts aliases, is case-insensitive, and tolerates whitespace", () => {
+    expect(employmentTypeFacet(" FullTime , intern ")).toEqual(["full_time", "internship"]);
+  });
+
+  test("returns [] for empty or undefined input", () => {
+    expect(employmentTypeFacet(undefined)).toEqual([]);
+    expect(employmentTypeFacet("")).toEqual([]);
+    expect(employmentTypeFacet(" , ")).toEqual([]);
+  });
+
+  test("throws on a type freehire cannot express (temporary) rather than mapping it wrong", () => {
+    expect(() => employmentTypeFacet("temporary")).toThrow(/not available on freehire/);
+  });
+
+  test("throws on an unrecognized type", () => {
+    expect(() => employmentTypeFacet("seasonal")).toThrow(/not available on freehire/);
   });
 });
 

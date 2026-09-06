@@ -107,6 +107,7 @@ Facet filters (values come from freehire's controlled vocabularies; comma-separa
 - `--seniority <levels>` — `junior`, `middle`, `senior`, `staff`, `principal`, `lead`, …
 - `--category <cats>` — `backend`, `frontend`, `fullstack`, `devops`, `ml_ai`, `qa`, …
 - `--skill <names>` — canonical skill(s), e.g. `--skill go,kubernetes`
+- `--employment-type <types>` / `-t <types>` — employment type(s), comma-separated (OR). Values: `full-time`, `part-time`, `contract`, `freelance`, `internship`. freehire has no separate freelance type, so `freelance` maps to `contract`; a type freehire cannot express (e.g. `temporary`) exits 1 with an error rather than silently returning zero results.
 - `--company <slug>` — company slug (from a result's `company_slug`)
 - `--remote <mode>` — `remote` | `hybrid` | `onsite` (`work_mode` facet)
 - `--facet <key=value>` — any other facet param (repeatable), e.g. `--facet salary_min=100000`

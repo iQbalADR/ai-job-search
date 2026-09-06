@@ -153,6 +153,7 @@ Postings are treated as untrusted input (the workflow follows no instructions em
 - **`/notion-sync`** publishes a one-way, read-only view of the pipeline into a Notion database via the official Notion MCP server (OAuth, no API keys) - one row per ranked job plus every tracked application, with a write-once briefing page per row. The repo files stay the system of record: nothing syncs back, and documents sync as filenames only. Complements `/html-report`: that is the deep offline dashboard you regenerate at your desk; this is the glanceable live view from anywhere Notion runs (desktop, web, phone).
 - **`/gmail-sync`** reads your Gmail (via the Gmail connector) for status signals on your open applications - interview invites, assessment links, offers, rejections - and proposes them as a batch for you to approve before anything is written to the tracker or `outcome.md`, citing the source email on every proposed change. Offers stop short of proposing `hired`/`offer_declined` since that's your call; conflicting or unmatched signals get flagged for a manual `/outcome` pass instead of guessed.
 - **`/rank`** bridges `/scrape` and `/apply`: it batch-scores all newly scraped postings against the fit framework (parallel agents fetch each posting and score the five evaluation dimensions) and returns a ranked shortlist with honest per-job strengths and gaps. Deal-breakers veto, deadlines get urgency flags, dead postings get marked expired. Pick a number and it hands off to the full `/apply` workflow.
+- **`/job-reset-pref`** re-asks your `/scrape` and `/rank` preferences — employment type (freelance / part-time / full-time / …), location scope (a country or city, remote, or global), remoteness, recency, and how many results to show — writes them to `job-search.config.yaml` (or the private local override), then rechecks the already-scraped cache against the new preferences and regenerates the result files. Non-destructive: it re-derives the view, never deletes cached jobs. Complements `/setup --section search`, which handles roles and queries.
 - **`/expand`** enriches your profile by scanning public sources you've already linked in it (GitHub repos, portfolio site, Kaggle, Google Scholar) and looking up syllabi for named courses and certifications. Discovered competencies are added to your profile with a source tag. Useful right after `/setup` to surface skills that documents alone don't make explicit.
 - **`/upskill`** analyzes the gap between your profile, your tracked job postings, and your ranked-but-untracked postings (`/rank`'s recorded gaps in `seen_jobs.json`) — or a single posting via `/upskill <URL>`. Produces a prioritized heatmap of skill gaps and a learning plan with web-searched study resources and time estimates. Useful for career planning between applications.
 - **`/html-report`** generates a self-contained HTML dashboard from `job_search_tracker.csv` and the application archives — stat cards, status/sector/channel/funnel charts (inline SVG, no external dependencies), and a filterable applications table. Opens directly in a browser, fully offline. Re-run it any time after `/apply` or `/outcome` adds new entries.
@@ -166,6 +167,7 @@ Postings are treated as untrusted input (the workflow follows no instructions em
 ```
 ai-job-search/
 ├── CLAUDE.md                          # Main candidate profile + workflow rules
+├── job-search.config.yaml             # Central /scrape + /rank settings (sources, filters, output)
 ├── .claude/
 │   ├── commands/
 │   │   ├── apply.md                   # /apply workflow (drafter-reviewer)
@@ -174,6 +176,7 @@ ai-job-search/
 │   │   ├── add-template.md            # /add-template register custom templates (LaTeX, Typst, ...)
 │   │   ├── add-portal.md              # /add-portal generate a job-portal search skill for your market
 │   │   ├── rank.md                    # /rank triage scraped jobs into a ranked shortlist
+│   │   ├── job-reset-pref.md          # /job-reset-pref re-ask scrape/rank preferences + recheck the cache
 │   │   ├── outcome.md                 # /outcome record application results, archive materials
 │   │   ├── gmail-sync.md              # /gmail-sync auto-detect application status from Gmail
 │   │   ├── interview.md               # /interview stage-specific prep pack + mock interview
@@ -221,6 +224,9 @@ ai-job-search/
 │   ├── check_framework_version.py     # CI check: framework_version bumped when skill files change
 │   ├── check_upstream_updates.py      # Preview which personalized files an upstream update touches
 │   ├── convert_salary_excel.py        # Convert salary Excel to JSON
+│   ├── export_jobs.py                 # Export scraped/ranked jobs to HTML + CSV (used by /scrape, /rank)
+│   ├── mark_applied.py                # Mark scraped/ranked jobs as applied (tracker row + seen_jobs status)
+│   ├── scam_score.py                  # Legitimacy / scam red-flag score for freelance/project postings
 │   ├── lint_skills.py                 # CI lint for skills, commands, settings.json
 │   ├── robots_check.py                # Gate the browser-header retry against robots.txt
 │   ├── security_guards.py             # CI guards: permission allowlist, gitignore rules, manifests
@@ -259,6 +265,28 @@ All claims in the CV and cover letter are verified against your actual profile. 
 
 ## Customization
 
+### Configuration (`job-search.config.yaml`)
+
+Most of how `/scrape` and `/rank` behave is tuned from one commented file at the repo root, `job-search.config.yaml`, so you rarely need to touch the skill or command files. Every key is optional — delete the file (or any key) and the commands fall back to their built-in defaults.
+
+- **`search`** — locations to search, the recency window (`posted_within_days`), which **employment types** to keep (`full-time`, `part-time`, `contract`, `freelance`, `temporary`, `internship`), and workplace types (`remote`/`hybrid`/`onsite`). Employment types are passed to each portal's native filter where it has one (LinkedIn's job-type filter, freehire's `employment_type` facet) and filtered client-side otherwise, so a search for freelance or part-time work actually narrows results rather than post-filtering by eye.
+- **`output`** — how many jobs to show in the terminal (`show: all | top10 | top50 | <number>`) and whether to write result files (`html`, `csv`). `show` caps the **terminal view only**; the written HTML/CSV files are **never capped** — they always hold the **full** list (no top-N limit), sorted, with clickable links, so the website is complete even when the terminal shows just the top few. Files land in `reports/` (git-ignored). Both the terminal view and the files **exclude postings that are already closed** (detected at fetch time — "no longer advertised", 404, etc.) and, honoring `search.posted_within_days`, postings older than the window — so you don't waste time on dead or stale listings. Run `/rank` to liveness-check every scraped posting (`/scrape` only verifies the ones it inspects closely). **When you set `search.employment_types`** (e.g. freelance, part-time), results are **split by employment type** — freelance/part-time roles are listed in their own sections, apart from full-time, in both the terminal and the HTML/CSV files (configured types first).
+- **`portals`** — skip an installed portal for a run (`disabled: [...]`) without editing its skill.
+- **`sources.extra`** — add job sources **beyond** the installed portal CLIs without writing a new skill: RSS/Atom feeds, a generic REST/JSON API (with a field map), `site:` web-search queries, or a direct careers page. This is the lightweight step between the WebSearch fallback and a full [`/add-portal`](#job-search-tools) skill; use `/add-portal` when you want a tested, reusable CLI for a board you search often. The file ships ready-to-uncomment **freelance / project-based** sources (Upwork, Freelancer, Contra via public `site:` search; RemoteOK, Remotive, WeWorkRemotely via their public API/RSS) for part-time and gig work.
+
+**Legitimacy ("not a scam") score.** Freelance marketplaces carry many scam postings, so `/scrape` assesses each freelance/project posting for well-known red flags — off-platform contact, upfront fees, overpayment/fake-check patterns, odd payment methods, requests for bank/ID details, unrealistic pay — and shows a **Legit** band (Likely legit / Caution / High risk) in the terminal and a colored column in the HTML/CSV, with the matched flags. It's a caution signal for you, never an accusation against a company, and never auto-drops a posting. Check any posting yourself with `python3 tools/scam_score.py --file posting.txt` (or pipe the text).
+
+The result files are produced by `tools/export_jobs.py`, which is dependency-free and can also be run directly (e.g. `python3 tools/export_jobs.py --status ranked --sort score --top 50`). The first time a command runs it, Claude Code may ask once to approve `python3 tools/export_jobs.py`; to pre-approve it, add `Bash(python tools/export_jobs.py:*)` and `Bash(python3 tools/export_jobs.py:*)` to `.claude/settings.json` (and, to keep CI's `tools/security_guards.py` green, to that file's `ALLOWED_PERMISSIONS` set — the same paired-diff rule the shipped portal CLIs follow).
+
+**Marking jobs applied.** From a `/scrape` or `/rank` list, say "mark 3 as applied" (or name the job) and it's recorded via `tools/mark_applied.py` — an `applied` row is appended to `job_search_tracker.csv` and the job's `seen_jobs.json` status is set to `applied`, so it drops out of future scrapes/rankings and appears in `/html-report`. This is the quick path for a job you applied to directly (outside `/apply`); it never duplicates or downgrades a tracked application (advancing an existing one stays `/outcome`'s job). Run it directly too: `python3 tools/mark_applied.py <url> [--channel linkedin] [--note "…"] [--seen-only]`.
+
+**Keeping your settings private.** `job-search.config.yaml` is tracked in git, so anything in it can be pushed. If your locations, preferences, or sources are personal, copy it to **`job-search.config.local.yaml`** and edit that — it is git-ignored and never pushed, and `/scrape`/`/rank` read it in preference to the tracked file. The same applies to the profile itself: `CLAUDE.md`, the `01`–`07` skill files, `search-queries.md`, and `cv/main_example.tex` are *tracked* template files that `/setup` fills with your personal data, so `.gitignore` cannot stop them from being pushed. Two options:
+
+- **Private repository (recommended):** if this copy is for your own job search rather than for contributing changes back, use a private repo with this one as `upstream` (see [SETUP.md section 8](SETUP.md#8-pulling-upstream-updates-into-your-fork)).
+- **`tools/private-profile.sh` (lighter weight):** run `tools/private-profile.sh on` to set git's `skip-worktree` bit on those files, so your local edits to them are never staged or pushed on this clone. Run `off` before pulling upstream updates, then `on` again; `status` shows what's protected. This is per-clone local state, so re-run it after a fresh clone.
+
+A `private/` folder is also git-ignored for any other personal files you want to keep alongside the repo.
+
 ### Which files to edit manually
 
 If you prefer editing files directly instead of using `/setup`:
@@ -271,7 +299,8 @@ If you prefer editing files directly instead of using `/setup`:
 | `04-job-evaluation.md` | Skill match areas, career goals, motivation filters |
 | `05-cv-templates.md` | Profile statement templates for different role types |
 | `07-interview-prep.md` | Your STAR examples from actual experience |
-| `search-queries.md` | Job search queries for your skills and location |
+| `search-queries.md` | Job search queries (roles, titles, keywords) for your skills |
+| `job-search.config.yaml` | Run settings for `/scrape` + `/rank`: locations, employment types, extra sources, result count and files |
 
 ### Updating your search queries
 

@@ -20,6 +20,16 @@ venv/
 
 # Personal data (never commit these)
 salary_data.json
+
+# Personal, never-pushed override of the tracked job-search.config.yaml template.
+# Put your real locations, employment-type preferences, and extra sources here
+# instead of editing the tracked template, and they stay out of git. /scrape and
+# /rank read this in preference to job-search.config.yaml when it exists.
+job-search.config.local.yaml
+
+# Personal scratch space - anything you drop in private/ is ignored. A safe home
+# for a filled CV, a copy of your profile, notes, or anything you don't want pushed.
+private/
 # Match at any depth: the job-scraper skill resolves `job_scraper/` relative to
 # its own directory, so these land at .claude/skills/job-scraper/job_scraper/*.
 # A rooted `job_scraper/...` pattern silently fails to match them.
@@ -67,6 +77,14 @@ cv/*.txt
 cover_letters/cover_*.*
 cover_letters/Cover_*.*
 !cover_letters/cover_example.tex
+
+# Custom CV / cover-letter templates registered via /add-template. These are your
+# personal templates; the framework reads them from local disk, so ignoring them
+# doesn't affect /apply. templates/README.md stays tracked (these globs only match
+# the cv/ and cover_letters/ subfolders). Templates ship with [PLACEHOLDER] tokens
+# and are safe to share - if you WANT to contribute one, force-add it: git add -f.
+templates/cv/**
+templates/cover_letters/**
 
 # documents/ subfolder contents are personal — only README and folder structure are tracked
 documents/cv/**
