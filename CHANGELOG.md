@@ -133,6 +133,15 @@ per-file diff commands.
 
 ### Fixed
 
+- **Exported files hide empty columns and infer employment type from titles** - a `/scrape`
+  export showed `Score` and `Verdict` columns full of "—" (those are only populated by `/rank`),
+  and most jobs fell into a giant "Unspecified" employment-type group even when the title said the
+  type outright ("Staff iOS Engineer (Contract)"). Now `tools/export_jobs.py` drops any column that
+  is empty for every row (so a scrape export omits Score/Verdict entirely; a rank export keeps them),
+  and derives the employment type from an explicit word in the title/description when the structured
+  field is missing — so those roles group under Contract/Freelance/Part-time and "Unspecified" holds
+  only genuinely untyped postings. A role with no stated type is never guessed as full-time. `/scrape`
+  also stores the title-inferred type so `/rank` sees it. Covered by new `test_export_jobs.py` cases.
 - **The exported HTML/CSV files are never capped by the terminal top-N setting** - `output.show`
   (top10 / top50 / …) is a terminal-view limit only, but it could read as if it also trimmed the
   written files. `/scrape` and `/rank` now pass `--top all` to `tools/export_jobs.py` explicitly and

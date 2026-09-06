@@ -384,9 +384,9 @@ def cell_value(rec: dict[str, Any], key: str) -> str:
     if key == "_source":
         return source_label(rec)
     if key == "employment_type":
-        # Show the canonical label ("Part-time"), matching the group headings,
-        # rather than a portal's raw spelling ("part_time").
-        return _canon_employment(rec.get(key)) or ""
+        # Show the canonical label ("Part-time"), matching the group headings -
+        # from the structured field, or inferred from the title when absent.
+        return resolved_employment(rec) or ""
     val = rec.get(key)
     if val is None or val == "":
         return ""
@@ -394,11 +394,14 @@ def cell_value(rec: dict[str, Any], key: str) -> str:
 
 
 def write_csv(jobs: list[dict[str, Any]], path: Path) -> None:
+    # Match the HTML: drop columns that are empty for every row (e.g. Score/Verdict
+    # on a /scrape export). Title/url are always kept.
+    columns = visible_columns(jobs)
     with path.open("w", encoding="utf-8", newline="") as fh:
         writer = csv.writer(fh)
-        writer.writerow([header for header, _ in COLUMNS])
+        writer.writerow([header for header, _ in columns])
         for rec in jobs:
-            writer.writerow([cell_value(rec, key) for _, key in COLUMNS])
+            writer.writerow([cell_value(rec, key) for _, key in columns])
 
 
 def badge_class(rec: dict[str, Any]) -> str:
@@ -454,9 +457,42 @@ def _canon_employment(value: Any) -> str | None:
     return EMPLOYMENT_CANON.get(raw, raw.title())
 
 
+# Employment-type words to detect in a title/description when the structured field
+# is missing, most specific first so "part-time contract" reads as Part-time.
+_TITLE_TYPE_PATTERNS = [
+    ("Internship", r"\bintern(ship)?\b"),
+    ("Freelance", r"\bfreelance(r)?\b"),
+    ("Part-time", r"\bpart[\s-]?time\b"),
+    ("Temporary", r"\b(temporary|seasonal)\b"),
+    ("Contract", r"\b(contract|contractor|c2c|corp[\s-]?to[\s-]?corp)\b"),
+    ("Full-time", r"\b(full[\s-]?time|permanent)\b"),
+]
+
+
+def infer_employment_from_title(title: Any, description: Any = None) -> str | None:
+    """Guess the employment type from an explicit word in the title (or description)
+    when the structured field is absent - e.g. 'Staff iOS Engineer (Contract)' ->
+    Contract. Returns None when no type word appears (never guesses full-time by
+    default; a role with no stated type stays Unspecified)."""
+    text = f"{title or ''} {description or ''}".lower()
+    for label, pattern in _TITLE_TYPE_PATTERNS:
+        if re.search(pattern, text):
+            return label
+    return None
+
+
+def resolved_employment(rec: dict[str, Any]) -> str | None:
+    """The job's employment type: the structured field if set, else inferred from
+    the title/description. None when it cannot be determined."""
+    return (
+        _canon_employment(rec.get("employment_type"))
+        or infer_employment_from_title(rec.get("title"), rec.get("description"))
+    )
+
+
 def employment_group(rec: dict[str, Any]) -> str:
     """The employment-type group label for a job, or 'Unspecified' when unknown."""
-    return _canon_employment(rec.get("employment_type")) or UNSPECIFIED_GROUP
+    return resolved_employment(rec) or UNSPECIFIED_GROUP
 
 
 def ordered_groups(
@@ -485,18 +521,30 @@ def ordered_groups(
     return [(lab, groups[lab]) for lab in order]
 
 
-def _header_cells() -> str:
+def visible_columns(jobs: list[dict[str, Any]]) -> list[tuple[str, str]]:
+    """The COLUMNS to render: Title is always shown; every other column appears
+    only if at least one job has a value for it. This drops noise columns like
+    Score/Verdict on a /scrape export (nothing ranked yet, so they are all empty).
+    `url` is carried through (rendered as the always-present Link column)."""
+    cols = []
+    for header, key in COLUMNS:
+        if key in ("title", "url") or any(cell_value(j, key) for j in jobs):
+            cols.append((header, key))
+    return cols
+
+
+def _header_cells(columns: list[tuple[str, str]]) -> str:
     cells = "".join(
         f'<th data-key="{html.escape(key)}">{html.escape(header)}</th>'
-        for header, key in COLUMNS
+        for header, key in columns
         if key != "url"
     )
     return cells + "<th>Link</th>"
 
 
-def _job_row_html(rec: dict[str, Any], index: int) -> str:
+def _job_row_html(rec: dict[str, Any], index: int, columns: list[tuple[str, str]]) -> str:
     cells = [f'<td class="num">{index}</td>']
-    for header, key in COLUMNS:
+    for header, key in columns:
         if key == "url":
             continue
         raw = cell_value(rec, key)
@@ -543,7 +591,7 @@ def _job_row_html(rec: dict[str, Any], index: int) -> str:
         if scam_flags:
             items = "".join(f"<li>{html.escape(str(f))}</li>" for f in scam_flags)
             parts.append(f'<div class="scamflags"><b>Legitimacy flags</b><ul>{items}</ul></div>')
-        colspan = len(COLUMNS) + 1  # +1 for the row-number column
+        colspan = len(columns) + 1  # +1 for the row-number column (url renders as Link)
         detail = (
             f'<tr class="detail"><td colspan="{colspan}"><div class="detail-wrap">'
             + "".join(parts) + "</div></td></tr>"
@@ -551,20 +599,25 @@ def _job_row_html(rec: dict[str, Any], index: int) -> str:
     return f'<tr class="job">{"".join(cells)}</tr>{detail}'
 
 
-def _table_html(jobs: list[dict[str, Any]], start_index: int, table_id: str | None = None) -> tuple[str, int]:
+def _table_html(
+    jobs: list[dict[str, Any]],
+    start_index: int,
+    columns: list[tuple[str, str]],
+    table_id: str | None = None,
+) -> tuple[str, int]:
     """A full <table> for a job list, numbering rows from start_index. Returns
     (html, next_index) so grouped sections keep a single running numbering."""
     idx = start_index
     rows = []
     for rec in jobs:
-        rows.append(_job_row_html(rec, idx))
+        rows.append(_job_row_html(rec, idx, columns))
         idx += 1
     rows_html = "\n".join(rows) or (
-        f'<tr><td colspan="{len(COLUMNS) + 1}" class="empty">No jobs to show.</td></tr>'
+        f'<tr><td colspan="{len(columns) + 1}" class="empty">No jobs to show.</td></tr>'
     )
     id_attr = f' id="{table_id}"' if table_id else ""
     table = (
-        f'<table class="jobs"{id_attr}><thead><tr><th>#</th>{_header_cells()}</tr></thead>'
+        f'<table class="jobs"{id_attr}><thead><tr><th>#</th>{_header_cells(columns)}</tr></thead>'
         f'<tbody>\n{rows_html}\n</tbody></table>'
     )
     return table, idx
@@ -578,12 +631,14 @@ def render_html(
     target_types: list[str] | None = None,
 ) -> str:
     generated = datetime.now().strftime("%Y-%m-%d %H:%M")
+    # Columns are computed once over all jobs so every grouped table lines up.
+    columns = visible_columns(jobs)
 
     if group_by == "employment-type":
         sections = []
         idx = 1
         for label, gjobs in ordered_groups(jobs, target_types):
-            table, idx = _table_html(gjobs, idx)
+            table, idx = _table_html(gjobs, idx, columns)
             sections.append(
                 f'<section class="group-section">'
                 f'<h2 class="group">{html.escape(label)} <span class="gcount">({len(gjobs)})</span></h2>'
@@ -591,7 +646,7 @@ def render_html(
             )
         content = "\n".join(sections) or '<p class="empty">No jobs to show.</p>'
     else:
-        table, _ = _table_html(jobs, 1, table_id="jobs")
+        table, _ = _table_html(jobs, 1, columns, table_id="jobs")
         content = f'<div class="table-wrap">{table}</div>'
 
     try:

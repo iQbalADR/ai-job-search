@@ -27,8 +27,11 @@ from tools.export_jobs import (
     freshness_date,
     cap_top,
     cell_value,
+    infer_employment_from_title,
     ordered_groups,
+    resolved_employment,
     source_label,
+    visible_columns,
     wanted_statuses,
     write_csv,
     render_html,
@@ -232,6 +235,54 @@ class EmploymentGroupTests(unittest.TestCase):
 
     def test_unknown_type_is_title_cased(self):
         self.assertEqual(employment_group(job(employment_type="seasonal")), "Seasonal")
+
+    def test_infers_type_from_title_when_field_missing(self):
+        self.assertEqual(infer_employment_from_title("Staff iOS Engineer (Contract)"), "Contract")
+        self.assertEqual(infer_employment_from_title("Freelance Mobile Developer"), "Freelance")
+        self.assertEqual(infer_employment_from_title("Part-Time Data Analyst"), "Part-time")
+        self.assertEqual(infer_employment_from_title("Marketing Intern"), "Internship")
+
+    def test_no_type_word_is_not_guessed(self):
+        self.assertIsNone(infer_employment_from_title("iOS Software Engineer II"))
+
+    def test_structured_field_beats_title_inference(self):
+        rec = job(title="Staff iOS Engineer (Contract)", employment_type="full_time")
+        self.assertEqual(resolved_employment(rec), "Full-time")
+
+    def test_employment_group_uses_title_inference(self):
+        rec = job(title="Staff iOS Engineer (Contract)")  # no employment_type field
+        self.assertEqual(employment_group(rec), "Contract")
+
+
+class VisibleColumnsTests(unittest.TestCase):
+    def test_all_empty_columns_are_dropped(self):
+        # Unranked scrape jobs: no rank_score/rank_verdict -> those columns drop.
+        jobs = [job(title="A", url="https://a", fit="high"),
+                job(title="B", url="https://b", fit="low")]
+        keys = [k for _, k in visible_columns(jobs)]
+        self.assertNotIn("rank_score", keys)
+        self.assertNotIn("rank_verdict", keys)
+        self.assertIn("fit", keys)      # populated -> kept
+        self.assertIn("title", keys)    # always
+        self.assertIn("url", keys)      # always (Link)
+
+    def test_populated_column_is_kept(self):
+        jobs = [job(url="https://a", rank_score=82)]
+        self.assertIn("rank_score", [k for _, k in visible_columns(jobs)])
+
+    def test_scrape_export_html_has_no_score_column(self):
+        out = render_html([job(url="https://a", fit="high")], "M", Path("x.json"))
+        self.assertNotIn('data-key="rank_score"', out)
+        self.assertNotIn('data-key="rank_verdict"', out)
+
+    def test_scrape_export_csv_has_no_score_column(self):
+        with tempfile.TemporaryDirectory() as d:
+            path = Path(d) / "o.csv"
+            write_csv([job(url="https://a", fit="high")], path)
+            header = path.read_text().splitlines()[0]
+        self.assertNotIn("Score", header)
+        self.assertNotIn("Verdict", header)
+        self.assertIn("Title", header)
 
     def test_type_cell_shows_canonical_label(self):
         self.assertEqual(cell_value(job(employment_type="part_time"), "employment_type"), "Part-time")
