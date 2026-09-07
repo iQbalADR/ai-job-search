@@ -52,6 +52,7 @@ Key flags:
 - `--jobage <days>` — posted within N days: `1`, `7`, `14`, `30`. Omit for all postings.
 - `--jobage-minutes <n>` — posted within N minutes (sub-day precision, e.g. `30`). Conflicts with `--jobage` — pass only one.
 - `--remote <mode>` — `remote`, `hybrid`, or `onsite` (workplace-type filter).
+- `--employment-type <types>` / `-t <types>` — employment type(s), comma-separated (OR). Values: `full-time`, `part-time`, `contract`, `freelance`, `temporary`, `internship`. LinkedIn has no separate freelance type, so `freelance` maps to Contract. An unrecognized value exits 1 with an error rather than being ignored.
 - `--page <n>` — page number (1-indexed, 10 results per page).
 - `--limit <n>` / `-n <n>` — cap total results emitted (client-side).
 - `--format json|table|plain` — default `json`.
@@ -74,6 +75,9 @@ bun run .agents/skills/linkedin-search/cli/src/cli.ts search -q "data engineer" 
 
 # Product manager roles in Berlin, remote
 bun run .agents/skills/linkedin-search/cli/src/cli.ts search -q "product manager" -l "Berlin, Germany" --remote remote --format table
+
+# Freelance or part-time developer roles, remote
+bun run .agents/skills/linkedin-search/cli/src/cli.ts search -q "developer" -l "Remote" -t freelance,part-time --format table
 
 # Any role, fully remote
 bun run .agents/skills/linkedin-search/cli/src/cli.ts search -q "paralegal" -l "Remote" --format table

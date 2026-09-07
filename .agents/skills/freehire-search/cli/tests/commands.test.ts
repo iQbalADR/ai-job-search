@@ -83,6 +83,7 @@ const searchOpts = {
   seniority: [] as string[],
   category: [] as string[],
   skills: [] as string[],
+  employmentType: [] as string[],
   facets: {} as Record<string, string[]>,
 };
 

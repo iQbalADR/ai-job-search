@@ -56,6 +56,7 @@ See `../SKILL.md` for the full flag reference and the Terms-of-Service note.
 | `--query` | `-q` | Keywords (title / skill / role). Recommended. |
 | `--jobage` | | Posted within N days: `1`, `7`, `14`, `30`. |
 | `--remote` | | `remote` \| `hybrid` \| `onsite`. |
+| `--employment-type` | `-t` | Type(s), comma = OR: `full-time`, `part-time`, `contract`, `freelance`, `temporary`, `internship`. (`freelance` → Contract.) |
 | `--page` | | 1-indexed page (10 results/page). |
 | `--limit` | `-n` | Cap results emitted. |
 | `--format` | | `json` \| `table` \| `plain`. |

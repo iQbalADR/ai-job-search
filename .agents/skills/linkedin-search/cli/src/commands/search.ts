@@ -5,6 +5,7 @@ import {
   jobageToTPR,
   minutesToTPR,
   workTypeFlag,
+  employmentTypeFlag,
   writeError,
   type JobCard,
 } from "../helpers.js"
@@ -15,6 +16,7 @@ export interface SearchOpts {
   jobage: number
   jobageMinutes?: number
   remote?: string // "remote" | "hybrid" | "onsite"
+  employmentType?: string // comma-separated, e.g. "freelance,part-time"
   page: number
   limit?: number
   format: "json" | "table" | "plain"
@@ -28,6 +30,8 @@ function buildUrl(opts: SearchOpts): string {
   if (tpr) params.set("f_TPR", tpr)
   const wt = workTypeFlag(opts.remote)
   if (wt) params.set("f_WT", wt)
+  const jt = employmentTypeFlag(opts.employmentType)
+  if (jt) params.set("f_JT", jt)
   params.set("start", String((opts.page - 1) * 10))
   return `${SEARCH_URL}?${params.toString()}`
 }

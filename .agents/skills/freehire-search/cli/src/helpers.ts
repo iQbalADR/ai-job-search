@@ -218,6 +218,53 @@ export function cleanHtml(html: string | null | undefined): string | null {
   return text || null
 }
 
+// freehire's employment_type facet vocabulary. The shared employment-type
+// vocabulary used across this repo's config and CLIs maps onto it here.
+// freehire has no separate "freelance" type, so freelance resolves to contract,
+// and it has no "temporary" type at all - those are rejected rather than mapped
+// to something wrong, because an unrecognized value returns zero results (the
+// API silently filters everything out), which would look like "no jobs" instead
+// of a config mistake.
+const EMPLOYMENT_TYPE_FACETS: Record<string, string> = {
+  "full-time": "full_time",
+  fulltime: "full_time",
+  permanent: "full_time",
+  perm: "full_time",
+  "part-time": "part_time",
+  parttime: "part_time",
+  contract: "contract",
+  contractor: "contract",
+  freelance: "contract",
+  freelancer: "contract",
+  internship: "internship",
+  intern: "internship",
+}
+
+/**
+ * Map a comma-separated employment-type list ("freelance,part-time") onto
+ * freehire's employment_type facet values (["contract", "part_time"]), each of
+ * which becomes a repeated query param. De-duplicates (freelance and contract
+ * both map to contract) and preserves first-seen order. Returns [] for empty
+ * input. Throws on a value freehire cannot express rather than dropping it
+ * silently or mapping it to a wrong bucket.
+ */
+export function employmentTypeFacet(csv: string | undefined): string[] {
+  if (!csv) return []
+  const values: string[] = []
+  for (const raw of csv.split(",")) {
+    const key = raw.trim().toLowerCase()
+    if (!key) continue
+    const mapped = EMPLOYMENT_TYPE_FACETS[key]
+    if (!mapped) {
+      throw new Error(
+        `employment type "${raw.trim()}" is not available on freehire - supported: full-time, part-time, contract, freelance, internship`,
+      )
+    }
+    if (!values.includes(mapped)) values.push(mapped)
+  }
+  return values
+}
+
 /** Extract a freehire public slug from a bare slug or a /jobs/<slug> URL. */
 export function normalizeSlug(input: string): string | null {
   const trimmed = input.trim()

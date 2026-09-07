@@ -286,3 +286,51 @@ export function workTypeFlag(mode: string | undefined): string | null {
       return null
   }
 }
+
+// LinkedIn's f_JT employment-type codes. The shared vocabulary used across this
+// repo's config and CLIs (full-time / part-time / contract / freelance /
+// temporary / internship) maps onto them here; a few common spellings are
+// accepted as aliases. LinkedIn has no separate "freelance" type, so freelance
+// resolves to Contract (its closest equivalent).
+const EMPLOYMENT_TYPE_CODES: Record<string, string> = {
+  "full-time": "F",
+  fulltime: "F",
+  permanent: "F",
+  perm: "F",
+  "part-time": "P",
+  parttime: "P",
+  contract: "C",
+  contractor: "C",
+  freelance: "C",
+  freelancer: "C",
+  temporary: "T",
+  temp: "T",
+  internship: "I",
+  intern: "I",
+  volunteer: "V",
+  other: "O",
+}
+
+/**
+ * Convert a comma-separated employment-type list ("freelance,part-time") into
+ * LinkedIn's f_JT value ("C,P"). Codes are de-duplicated (freelance and contract
+ * both map to C) and returned in first-seen order. Returns null for an empty
+ * input. Throws on an unrecognized value rather than silently dropping it - a
+ * discarded filter changes what the search returns with no error.
+ */
+export function employmentTypeFlag(csv: string | undefined): string | null {
+  if (!csv) return null
+  const codes: string[] = []
+  for (const raw of csv.split(",")) {
+    const value = raw.trim().toLowerCase()
+    if (!value) continue
+    const code = EMPLOYMENT_TYPE_CODES[value]
+    if (!code) {
+      throw new Error(
+        `unknown employment type "${raw.trim()}" - supported: full-time, part-time, contract, freelance, temporary, internship`,
+      )
+    }
+    if (!codes.includes(code)) codes.push(code)
+  }
+  return codes.length ? codes.join(",") : null
+}
