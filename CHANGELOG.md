@@ -69,6 +69,12 @@ per-file diff commands.
   preferences. It never deletes `seen_jobs.json` entries or rewrites their status without
   confirmation. `tools/export_jobs.py` gains an `--employment-types` filter (keep only the requested
   types) that the recheck can use for a hard-filtered view.
+- **`output.employment_filter` (group vs strict)** - a durable knob for how the employment-type
+  sections treat roles outside `search.employment_types`. `group` (default) keeps every role in its
+  own section (with "Unspecified" for untyped ones); `strict` shows **only** your configured types,
+  dropping full-time, off-type, and roles whose type can't be determined - a one-list freelance/
+  part-time view. `/scrape` and `/rank` pass `--employment-types` to the exporter when it is `strict`,
+  and `/job-reset-pref` offers it as a one-tap choice (writing the knob so future runs honor it).
 - **Results split by employment type** - when `search.employment_types` is set (e.g. freelance,
   part-time), `/scrape` and `/rank` now present those roles in their own lists, apart from
   full-time, instead of one mixed table. `tools/export_jobs.py` gains `--group-by employment-type`

@@ -28,7 +28,7 @@ Follow these steps **in order**.
 5. Read the scoring framework and profile **once**:
    - `.claude/skills/job-application-assistant/04-job-evaluation.md`
    - `.claude/skills/job-application-assistant/01-candidate-profile.md`
-6. Read the run-settings config (optional): prefer the git-ignored `job-search.config.local.yaml` when it exists, otherwise the tracked `job-search.config.yaml` (read one, not both). Use it for `output.show` (the default shortlist size — see Step 0) and `output.write_files` / `output.formats` / `output.directory` (the Step 4.5 export). Any missing key uses its default.
+6. Read the run-settings config (optional): prefer the git-ignored `job-search.config.local.yaml` when it exists, otherwise the tracked `job-search.config.yaml` (read one, not both). Use it for `output.show` (the default shortlist size — see Step 0) and `output.write_files` / `output.formats` / `output.directory` / `output.employment_filter` (the Step 4.5 export). Any missing key uses its default.
 
 State how many jobs will be ranked before proceeding.
 
@@ -109,7 +109,7 @@ python3 tools/export_jobs.py --status ranked --sort score --top all --max-age-da
 
 - **Always pass `--top all` — the ranking file is never capped.** The `--top`/`output.show` size limits only the terminal **Shortlist** (Step 5); the written HTML/CSV holds **every** ranked job, however long the list. Never pass the shortlist size to the exporter.
 - Pass `--max-age-days` set to `search.posted_within_days` (default **14**) so a stale posting never lands in the ranking file. The exporter drops `expired` jobs by default — including the ones this run's scoring agents and the Step 3 sweep just retired — so dead postings stay out of the file automatically.
-- **When `search.employment_types` is set**, also pass `--group-by employment-type --target-types "<the configured types, comma-joined>"` so the ranking file lists freelance/part-time roles in sections apart from full-time (configured types first), ranked within each. Omit both flags otherwise.
+- **When `search.employment_types` is set**, also pass `--group-by employment-type --target-types "<the configured types, comma-joined>"` so the ranking file lists freelance/part-time roles in sections apart from full-time (configured types first), ranked within each. Omit both flags otherwise. If `output.employment_filter` is `strict`, also pass `--employment-types "<the configured types, comma-joined>"` to drop full-time/off-type/untyped roles from the file entirely (default `group` keeps them in their sections).
 - Respect `output.formats` (default `html,csv`) via `--formats <list>` and `output.directory` (default `reports`) via `--out-dir <dir>`. Default output: `reports/job-ranking.html` and `reports/job-ranking.csv` (the `reports/` folder is git-ignored). Using a distinct basename from `/scrape`'s `job-matches` keeps the two exports from overwriting each other.
 - If `python3` is unavailable, fall back to `python`; if neither is present, note it and skip the export rather than failing the command.
 

@@ -61,6 +61,7 @@ Optional arguments:
    - `search.workplace_types` - remote/hybrid/onsite to keep (default: all)
    - `output.show` - how many jobs to show in the terminal (default `top10`). See Step 5.
    - `output.write_files`, `output.formats`, `output.directory` - result files. See Step 5.
+   - `output.employment_filter` - `group` (default) or `strict` for the type sections. See Step 5.5.
    - `portals.disabled` - portal skills to skip this run (in addition to each
      portal's own `enabled: false`). See Step 1b.
    - `sources.extra` - extra job sources beyond the portal CLIs. See Step 1d.
@@ -409,6 +410,7 @@ python3 tools/export_jobs.py --status new --sort fit --top all --max-age-days <p
 - **Always pass `--top all` — the files are never capped.** `output.show` limits only the terminal table (Step 5); the written HTML/CSV must contain **every** matching job, however many. Never pass `output.show` (top10/top25/…) to the exporter.
 - Pass `--max-age-days` set to `search.posted_within_days` (default **14**) so the files honor the same freshness window as the search and never show a posting older than the window. The exporter also drops jobs marked `expired` by default (Step 2's closed-at-source detection), so dead postings stay out of the files without any extra flag.
 - **When `search.employment_types` is set** (e.g. freelance, part-time), also pass `--group-by employment-type --target-types "<the configured types, comma-joined>"`. The HTML then lists each employment type in its own section — freelance and part-time apart from full-time — with the configured types first, and the CSV is ordered to match. Omit both flags when no employment types are configured (a single combined list is fine then).
+- **Honor `output.employment_filter`** (default `group`): when it is `strict` and `search.employment_types` is set, also pass `--employment-types "<the configured types, comma-joined>"` so the files show **only** those types — full-time, off-type, and roles whose type can't be determined are dropped (the exporter still infers the type from titles first, so only genuinely untyped roles fall away). Leave it out for the default `group`, which keeps every role in its section (with an "Unspecified" section for untyped ones).
 - Respect `output.formats` (default `html,csv`) by passing `--formats <list>`, and `output.directory` (default `reports`) by passing `--out-dir <dir>`. The default output is `reports/job-matches.html` and `reports/job-matches.csv` (the `reports/` folder is git-ignored).
 - `--status new` writes just this run's new matches; if the user asked to see everything, use `--status all` instead.
 - If `python3` is unavailable, fall back to `python`; if neither is present, note it and skip the export rather than failing the run.

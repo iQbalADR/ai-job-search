@@ -99,6 +99,16 @@ output:
   # freelance/part-time roles are listed apart from full-time (configured types
   # first), in both the terminal and the HTML/CSV files.
 
+  # How the employment-type sections handle roles OUTSIDE your search.employment_types
+  # (only matters when employment_types is set):
+  #   group  - keep every role, split into sections (your types first, then the
+  #            rest, then "Unspecified" for roles that state no type). Default.
+  #   strict - show ONLY your configured types; drop full-time, off-type, and
+  #            roles whose type can't be determined. Use this when you want a
+  #            freelance/part-time-only list and don't mind losing untyped roles.
+  # /job-reset-pref can flip this for you.
+  employment_filter: group
+
   # Directory the files are written to (created if missing). This folder is
   # git-ignored, so your job results are never committed.
   directory: reports

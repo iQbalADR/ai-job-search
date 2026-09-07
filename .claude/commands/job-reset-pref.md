@@ -46,6 +46,11 @@ Keep it to a few questions:
 4. **Recency window**: how many days back to consider a posting fresh — `search.posted_within_days`
    (e.g. 7 / 14 / 30).
 5. **How many to show**: `output.show` — `top10`, `top50`, `all`, or a number.
+6. **Off-type roles** (only ask when employment types were chosen in Q1): `output.employment_filter` —
+   *Keep all, grouped* (`group`, default: freelance/part-time in their own sections, full-time and
+   untyped roles still listed under their own headings) or *Only my types* (`strict`: drop full-time,
+   off-type, and roles whose type can't be determined). This is the one-tap freelance/part-time-only
+   switch — note that `strict` can hide legitimate roles that simply don't state a type.
 
 ---
 
@@ -57,9 +62,9 @@ if it exists, write there. If it does not exist, ask: "Save to a private
 — default to creating the local override. When creating it, you may copy the tracked
 file as a starting point so its comments carry over.
 
-Write only the `search.*` and `output.show` keys the user set, preserving all other keys
-and comments. Then read the file back and show the effective new values as a short
-confirmation. Never write personal data other than these preference values.
+Write only the `search.*`, `output.show`, and `output.employment_filter` keys the user set,
+preserving all other keys and comments. Then read the file back and show the effective new
+values as a short confirmation. Never write personal data other than these preference values.
 
 ---
 
@@ -89,18 +94,21 @@ This is a **non-destructive** re-evaluation — it never deletes `seen_jobs.json
 4. Regenerate the result files with the new preferences:
 
    ```bash
-   python3 tools/export_jobs.py --status new,ranked \
+   python3 tools/export_jobs.py --status new,ranked --top all \
      --max-age-days <posted_within_days> \
      --group-by employment-type --target-types "<employment_types, comma-joined>" \
      --basename job-matches --title "Job Matches (prefs updated <YYYY-MM-DD>)"
    ```
 
-   - Add `--employment-types "<the configured types>"` **only if** the user wants a hard
-     filter that drops jobs whose type is unknown; most cached jobs from portals without
-     native type detection have no `employment_type`, so a hard filter can empty the file —
-     say so and default to grouping (which keeps unknown-type jobs under "Unspecified")
-     unless they ask to hard-filter.
+   - **If `output.employment_filter` is `strict`** (the Q6 "Only my types" choice), also pass
+     `--employment-types "<the configured types, comma-joined>"` so the file shows only those
+     types. The exporter infers a role's type from its title first, so this drops full-time,
+     off-type, and genuinely untyped roles — tell the user how many that removed (the
+     exporter reports "dropped N off-type", and the recheck tally above shows the same) so an
+     over-aggressive filter is visible. For the default `group`, omit
+     `--employment-types` and keep every role in its section.
    - Drop the `--group-by`/`--target-types` flags when the user chose *All types*.
+   - Always pass `--top all` — the files are never capped (that is the terminal's job).
    - Respect `output.formats`/`output.directory` from the config as `/scrape` does.
    - If `python3` is unavailable, fall back to `python`; if neither is present, skip the
      export with a note.
